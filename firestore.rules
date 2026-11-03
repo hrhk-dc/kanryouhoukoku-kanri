@@ -1,0 +1,119 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+    function verified() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+    function membersDoc() {
+      return get(/databases/$(database)/documents/settings/members).data;
+    }
+    function hasMembers() {
+      return exists(/databases/$(database)/documents/settings/members);
+    }
+
+    // オーナー：hrhk@dc-hm.com（メール確認済み）
+    function isOwner() {
+      return verified() && myEmail() == "hrhk@dc-hm.com";
+    }
+    // 管理者：オーナー＋メンバー管理で「管理者」にした人
+    function isAdmin() {
+      return isOwner() || (verified() && hasMembers() && myEmail() in membersDoc().get('admins', []));
+    }
+    // メンバー：管理者＋メンバー管理で許可した人だけ
+    function isMember() {
+      return isAdmin() || (verified() && hasMembers() && myEmail() in membersDoc().get('emails', []));
+    }
+
+    function isOwnerOrAdmin() {
+      return resource.data.authorUid == request.auth.uid || isAdmin();
+    }
+    function authorUnchanged() {
+      return request.resource.data.authorUid == resource.data.authorUid
+        && request.resource.data.authorEmail == resource.data.authorEmail;
+    }
+    function createdBySelf() {
+      return request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.authorEmail == request.auth.token.email;
+    }
+
+    // メンバー一覧：ログインしていれば自分が許可されたか確認できる／書けるのは管理者だけ
+    match /settings/members {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    // フォーマットなど：メンバーが読める／書けるのは管理者だけ
+    match /settings/{docId} {
+      allow read: if isMember();
+      allow write: if isAdmin();
+    }
+
+    // 利用申請：本人が出す／本人と管理者が見る／管理者が許可・却下
+    match /accessRequests/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.email == myEmail();
+      allow delete: if signedIn() && (request.auth.uid == uid || isAdmin());
+    }
+
+    // 完了報告：次回アクションは必須
+    match /reports/{reportId} {
+      allow read: if isMember();
+      allow create: if isMember() && createdBySelf()
+        && request.resource.data.nextActionItems is list
+        && request.resource.data.nextActionItems.size() > 0;
+      allow update: if isMember() && isOwnerOrAdmin() && authorUnchanged()
+        && request.resource.data.nextActionItems is list
+        && request.resource.data.nextActionItems.size() > 0;
+      allow delete: if isMember() && isOwnerOrAdmin();
+    }
+
+    // 翌日訪問リスト（案件番号とデモURLはアプリからは変更できない）
+    match /visits/{visitId} {
+      allow read: if isMember();
+      allow create: if isMember() && createdBySelf()
+        && request.resource.data.visitDate is string
+        && request.resource.data.items is list
+        && request.resource.data.caseNo is string
+        && !('demoUrl' in request.resource.data);
+      allow update: if isMember() && isOwnerOrAdmin() && authorUnchanged()
+        && request.resource.data.visitDate is string
+        && request.resource.data.items is list
+        && request.resource.data.get('caseNo', null) == resource.data.get('caseNo', null)
+        && request.resource.data.get('demoUrl', null) == resource.data.get('demoUrl', null);
+      allow delete: if isMember() && isOwnerOrAdmin();
+    }
+
+    // 案件番号の連番カウンター（増やす方向だけ許可）
+    match /counters/caseNo {
+      allow read: if isMember();
+      allow create: if isMember() && request.resource.data.last is int && request.resource.data.last > 0;
+      allow update: if isMember() && request.resource.data.last is int
+        && request.resource.data.last > resource.data.last;
+    }
+
+    // 写真（端末で小さくしたもの）
+    match /photos/{photoId} {
+      allow read: if isMember();
+      allow create: if isMember() && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.data is string && request.resource.data.data.size() < 1000000;
+      allow delete: if isMember() && (resource.data.ownerUid == request.auth.uid || isAdmin());
+    }
+
+    // 自分の名前（担当者名の自動入力用）：本人だけ
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // それ以外はすべて禁止
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

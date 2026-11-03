@@ -1,0 +1,8 @@
+node_modules/
+.netlify/
+.DS_Store
+*.zip
+# 秘密の鍵は絶対に入れない
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+.env

@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DC 完了報告</title>
+<meta name="theme-color" content="#1d4ed8">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="DC報告">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>DC 完了報告</h1>
+  <div class="topbar-actions">
+    <button id="installBtn" class="btn primary small hidden" type="button">アプリをインストール</button>
+    <button id="copyAppLink" class="btn ghost small" type="button">このアプリのリンクをコピー</button>
+    <button id="myNameLabel" class="btn ghost small hidden-logged-out" type="button" title="自分の名前（担当者名の自動入力）">👤 名前を設定</button>
+    <span id="userEmail" class="user-email"></span>
+    <button id="logoutBtn" class="btn ghost small hidden" type="button">ログアウト</button>
+  </div>
+</header>
+
+<div id="namePanel" class="name-panel hidden">
+  <label>自分の名前（固定すると、完了報告・訪問リストの「担当者名」に自動で入ります）
+    <input type="text" id="myNameInput" placeholder="例：山田 太郎">
+  </label>
+  <div class="btn-row">
+    <button class="btn primary small" type="button" id="saveMyName">保存する</button>
+    <button class="btn ghost small" type="button" id="cancelMyName">閉じる</button>
+  </div>
+  <p class="hint">空欄で保存すると固定を外します。</p>
+</div>
+<datalist id="caseNoList"></datalist>
+<div id="errorBanner" class="error-banner error-box hidden" role="alert"></div>
+
+<div id="configWarning" class="notice warn hidden">
+  Firebaseの設定がまだです。<code>firebase-config.js</code> にFirebaseの設定値を貼り付けてください（手順.md を参照）。
+</div>
+
+<main>
+  <!-- ログイン画面 -->
+  <section id="authView" class="card auth hidden">
+    <div id="inAppNotice" class="notice warn-box hidden">
+      LINEなどのアプリ内でリンクを開いているため、<strong>Googleでのログインが使えません</strong>。<br>
+      右上のメニュー（︙ や …）から「ブラウザで開く」「Safariで開く」を選ぶか、下のボタンでリンクをコピーしてChrome・Safariに貼り付けてください。
+      メールアドレスとパスワードでのログインは、このままでも使えます。
+      <div class="btn-row"><button class="btn small" type="button" id="copyLinkForBrowser">リンクをコピー</button></div>
+    </div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" data-mode="login" type="button">ログイン</button>
+      <button class="auth-tab" data-mode="signup" type="button">新規登録</button>
+    </div>
+    <form id="authForm">
+      <label>メールアドレス
+        <input type="email" id="authEmail" autocomplete="email" required>
+      </label>
+      <label>パスワード（6文字以上）
+        <input type="password" id="authPassword" autocomplete="current-password" minlength="6" required>
+      </label>
+      <label id="confirmWrap" class="hidden">パスワード（確認）
+        <input type="password" id="authPassword2" autocomplete="new-password" minlength="6">
+      </label>
+      <button class="btn primary full" type="submit" id="authSubmit">ログイン</button>
+    </form>
+    <div class="divider"><span>または</span></div>
+    <button class="btn full" id="googleBtn" type="button">Googleでログイン</button>
+    <button class="link-btn" id="resetBtn" type="button">パスワードを忘れた場合</button>
+    <p id="authError" class="error"></p>
+  </section>
+
+  <!-- 承認待ち画面（メンバー未登録の人） -->
+  <section id="pendingView" class="card auth hidden">
+    <h2>利用の許可を待っています</h2>
+    <p>このアプリは、管理者が許可したメンバーだけが使えます。</p>
+    <p class="hint">ログイン中：<b id="pendingEmail"></b></p>
+    <div id="pendingVerify" class="notice warn-box hidden">メールアドレスの確認がまだです。届いた確認メールのリンクを開いてから、ログインし直してください（Googleでログインした場合は不要です）。</div>
+    <label>お名前<input type="text" id="reqName" placeholder="例：山田 太郎"></label>
+    <div class="btn-row">
+      <button class="btn primary" type="button" id="sendRequest">管理者に利用を申請する</button>
+      <button class="btn" type="button" id="copyMyEmail">メールアドレスをコピー</button>
+    </div>
+    <p id="pendingStatus" class="hint"></p>
+  </section>
+
+  <!-- アプリ本体 -->
+  <section id="appView" class="hidden">
+    <div id="verifyNotice" class="notice hidden">
+      メールアドレスの確認がまだです。届いた確認メールのリンクを開いた後、一度ログインし直してください。
+      <button class="link-btn" id="resendVerify" type="button">確認メールを再送</button>
+    </div>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="today" type="button">今日</button>
+      <button class="tab" data-tab="list" type="button">報告一覧</button>
+      <button class="tab" data-tab="form" type="button">完了報告</button>
+      <button class="tab" data-tab="visits" type="button">翌日訪問リスト</button>
+      <button class="tab hidden" data-tab="stats" id="statsTab" type="button">集計</button>
+      <button class="tab hidden" data-tab="admin" id="adminTab" type="button">管理</button>
+    </nav>
+
+    <!-- 今日 -->
+    <div id="tab-today" class="tab-panel">
+      <div class="card">
+        <h2 id="todayTitle">今日の予定</h2>
+        <div id="todayVisits"></div>
+      </div>
+      <div class="card">
+        <h2>次回アクション（今日まで）</h2>
+        <div id="todayActions"></div>
+      </div>
+      <div class="card">
+        <h2>報告がまだの訪問</h2>
+        <div id="todayMissing"></div>
+      </div>
+    </div>
+
+    <!-- 報告一覧 -->
+    <div id="tab-list" class="tab-panel hidden">
+      <div class="card list-tools">
+        <input type="search" id="searchInput" class="search" placeholder="キーワードで検索（案件名・訪問先・担当者名・メモなど）">
+        <div class="tool-row">
+          <label>並び順
+            <select id="sortSelect">
+              <option value="new">報告が新しい順</option>
+              <option value="old">報告が古い順</option>
+              <option value="nextDate">次回予定日が近い順</option>
+              <option value="received">受付日時が新しい順</option>
+              <option value="caseName">案件名順（あいうえお）</option>
+            </select>
+          </label>
+          <label>結果
+            <select id="resultFilter"><option value="">すべて</option></select>
+          </label>
+          <label>担当者
+            <select id="authorFilter">
+              <option value="">全員</option>
+              <option value="me">自分</option>
+            </select>
+          </label>
+        </div>
+        <div class="list-meta">
+          <span id="listCount"></span>
+          <button class="link-btn hidden" type="button" id="clearFilters">条件をクリア</button>
+        </div>
+      </div>
+      <div id="reportList"></div>
+    </div>
+
+    <!-- 完了報告フォーム -->
+    <div id="tab-form" class="tab-panel hidden">
+      <form id="reportForm" class="card" novalidate>
+        <h2 id="formTitle">完了報告</h2>
+        <p class="hint" id="caseHint">1日に複数の案件を回った場合は「＋ 別の案件を追加」で、まとめて報告できます。</p>
+        <div id="reportCases"></div>
+
+        <p id="formError" class="error"></p>
+        <div class="btn-row">
+          <button class="btn" type="button" id="addCase">＋ 別の案件を追加</button>
+          <button class="btn primary" type="submit" id="saveReport">保存する</button>
+          <button class="btn ghost hidden" type="button" id="cancelEdit">編集をやめる</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- 翌日訪問リスト -->
+    <div id="tab-visits" class="tab-panel hidden">
+      <form id="visitForm" class="card" novalidate>
+        <h2 id="visitFormTitle">訪問リストを入力</h2>
+        <label>訪問日
+          <input type="date" id="visitDate" required>
+        </label>
+        <div class="bulk-box" id="bulkBox">
+          <label for="bulkLinks" class="bulk-label">📋 Googleマップのリンクを貼り付けるだけでOK（1件でも、何件まとめてでも）</label>
+          <textarea id="bulkLinks" rows="3" placeholder="ここにリンクを貼り付け&#10;https://maps.app.goo.gl/xxxx&#10;https://maps.app.goo.gl/yyyy&#10;（LINEのメッセージをそのまま貼ってもOK）"></textarea>
+          <div class="btn-row"><button class="btn small primary" type="button" id="bulkAdd">読み取って追加</button></div>
+          <p class="hint">貼り付けると自動で読み取り、<b>リンク1つにつき1件</b>のカードを作ります。店舗名・住所・営業時間などは自動で入ります。間違っていたら、カードの中で直接書き換えてください。案件番号は保存したときに1件ずつ自動で付きます。</p>
+        </div>
+        <div id="visitRows"></div>
+        <p id="visitError" class="error"></p>
+        <div class="btn-row">
+          <button class="btn small ghost" type="button" id="addVisitRow">＋ リンクなしで手入力</button>
+          <button class="btn primary" type="submit" id="saveVisits">まとめて保存</button>
+          <button class="btn ghost hidden" type="button" id="cancelVisitEdit">編集をやめる</button>
+        </div>
+      </form>
+
+      <div class="card">
+        <h2>訪問リスト</h2>
+        <input type="search" id="visitSearch" class="search" placeholder="キーワードで検索（店舗名・案件番号・地域・業種・メモなど）">
+        <div class="filter-row">
+          <label>担当者
+            <select id="visitPerson"><option value="__me">自分</option><option value="">全員</option></select>
+          </label>
+          <label>表示する訪問日
+            <input type="date" id="visitFilterDate">
+          </label>
+          <label>並び順
+            <select id="visitSort">
+              <option value="caseDesc">案件番号が新しい順</option>
+              <option value="caseAsc">案件番号が古い順</option>
+              <option value="dateTime">訪問日・時刻が早い順</option>
+              <option value="area">地域順（県・市区）</option>
+              <option value="shop">店舗名順（あいうえお）</option>
+            </select>
+          </label>
+          <div class="btn-row">
+            <button class="btn small" type="button" id="visitShowTomorrow">明日</button>
+            <button class="btn small" type="button" id="visitShowAll">すべての日付</button>
+            <button class="btn small" type="button" id="copyAllClaude">表示中のマップを全件Claude Code用にコピー</button>
+          </div>
+        </div>
+        <div id="personCounts" class="person-counts"></div>
+        <div id="visitList"></div>
+      </div>
+    </div>
+
+    <!-- 集計（管理者のみ） -->
+    <div id="tab-stats" class="tab-panel hidden">
+      <div class="card">
+        <h2>集計</h2>
+        <div class="filter-row">
+          <label>期間
+            <select id="statsPeriod"></select>
+          </label>
+        </div>
+        <div id="statsSummary" class="stats-summary"></div>
+        <h3 class="stats-h">担当者別</h3>
+        <div id="statsPerson"></div>
+        <h3 class="stats-h">地域別（都道府県・市区）</h3>
+        <div id="statsArea"></div>
+        <h3 class="stats-h">月別の推移</h3>
+        <div id="statsMonth"></div>
+      </div>
+    </div>
+
+    <!-- 管理（管理者のみ） -->
+    <div id="tab-admin" class="tab-panel hidden">
+      <div class="card">
+        <h2>メンバー管理</h2>
+        <p class="hint">ここに登録したメールアドレスの人だけがアプリを使えます。「管理者」にした人は、フォーマット編集・集計・メンバー管理もできます。</p>
+        <div id="requestList"></div>
+        <div class="member-add">
+          <input type="email" id="newMemberEmail" placeholder="追加するメールアドレス">
+          <select id="newMemberRole"><option value="member">メンバー</option><option value="admin">管理者</option></select>
+          <button class="btn primary" type="button" id="addMember">追加</button>
+        </div>
+        <div id="memberList"></div>
+      </div>
+
+      <div class="card">
+        <h2>データのバックアップ（CSV）</h2>
+        <p class="hint">Excelでそのまま開けるCSVファイルでダウンロードします。定期的に保存しておくと安心です。</p>
+        <div class="btn-row">
+          <button class="btn" type="button" id="exportReports">完了報告をダウンロード</button>
+          <button class="btn" type="button" id="exportVisits">訪問リストをダウンロード</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Claude Code 連携</h2>
+        <p class="hint">Claude Codeでデモサイトを作ったとき、そのURLを案件番号の訪問先に自動で登録できます（初回だけNetlifyの設定が必要です。手順は管理者向けメモを参照）。</p>
+        <div class="btn-row">
+          <button class="btn" type="button" id="copyClaudeBatch">明日の訪問先のデモサイト作成をまとめて依頼（コピー）</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>フォーマットの編集</h2>
+        <div class="sub-tabs">
+          <button class="sub-tab active" data-fmt="report" type="button">完了報告</button>
+          <button class="sub-tab" data-fmt="nextAction" type="button">次回アクション</button>
+          <button class="sub-tab" data-fmt="visit" type="button">翌日訪問リスト</button>
+        </div>
+        <p class="hint" id="fmtHint"></p>
+        <div id="fmtSection"></div>
+        <div id="fieldEditor"></div>
+        <div class="btn-row">
+          <button class="btn" type="button" id="addField">＋ 項目を追加</button>
+          <button class="btn primary" type="button" id="saveFormat">このフォーマットを保存</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
