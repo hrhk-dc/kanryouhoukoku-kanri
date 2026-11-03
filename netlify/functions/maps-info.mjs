@@ -158,7 +158,11 @@ export default async (req) => {
     const key = (process.env.GOOGLE_MAPS_API_KEY || "").trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
     if (key && (info.name || info.lat)) {
       try { Object.assign(info, Object.fromEntries(Object.entries(await placesLookup(key, info.name || `${info.lat},${info.lng}`, info.lat, info.lng)).filter(([, v]) => v))); }
-      catch (e) { notes.push("店舗の詳細（電話番号など）を取得できませんでした：" + e.message); }
+      catch (e) {
+        // キーの中身は出さず、形だけ確認できるようにする（正しいキーは AIza で始まる39文字）
+        const shape = `［設定されているキー：${key.length}文字・${key.startsWith("AIza") ? "AIzaで始まる" : "AIzaで始まらない"}］`;
+        notes.push("店舗の詳細（電話番号など）を取得できませんでした：" + e.message + (/キーの文字列/.test(e.message) ? shape : ""));
+      }
     } else if (!key) {
       notes.push("営業時間・業種・電話番号は、管理者がGoogle Places APIキーを設定すると自動で入ります");
     }
