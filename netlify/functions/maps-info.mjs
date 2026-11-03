@@ -33,11 +33,16 @@ function parseMapsUrl(u) {
   const url = new URL(u);
   // 店舗名 /maps/place/店舗名/@...
   const place = url.pathname.match(/\/maps\/place\/([^/@]+)/);
-  if (place) out.name = decodeURIComponent(place[1].replace(/\+/g, " ")).trim();
+  if (place) {
+    let n = place[1].replace(/\+/g, " ");
+    for (let k = 0; k < 2 && /%[0-9A-F]{2}/i.test(n); k++) { try { n = decodeURIComponent(n); } catch { break; } }
+    out.name = n.trim();
+  }
   // 店舗のピン位置（!3d緯度!4d経度）を優先、なければ画面中心（@緯度,経度）
-  const pin = u.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
-  const at = u.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-  const q = url.searchParams.get("q") || url.searchParams.get("query") || "";
+  const dec = (() => { try { return decodeURIComponent(u); } catch { return u; } })();
+  const pin = dec.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+  const at = dec.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  const q = url.pathname.startsWith("/maps") ? (url.searchParams.get("q") || url.searchParams.get("query") || "") : "";
   const qll = q.match(/^\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
   const ll = pin || at || qll;
   if (ll) { out.lat = parseFloat(ll[1]); out.lng = parseFloat(ll[2]); }
@@ -45,15 +50,22 @@ function parseMapsUrl(u) {
   return out;
 }
 
+const isMapsPage = (u) => /(^|\.)google\.[a-z.]+$/i.test(u.hostname) && u.pathname.startsWith("/maps")
+  || /^maps\.google\.[a-z.]+$/i.test(u.hostname);
+
+// 短縮リンク（maps.app.goo.gl など）だけをたどって、Googleマップの本来のURLを得る。
+// Googleマップ本体のページは取りに行かない（サーバーからだとロボット確認画面に回されるため）
 async function resolve(link) {
   let cur = link;
   for (let i = 0; i < 8; i++) {
-    const host = new URL(cur).hostname;
-    // 同意画面に飛ばされたら continue= の先を使う
-    if (/^consent\./i.test(host)) {
-      const c = new URL(cur).searchParams.get("continue");
-      if (c) { cur = c; continue; }
+    const u = new URL(cur);
+    // ロボット確認・同意画面に回されたら、continue= の先（本来のURL）を使う
+    if (/\/sorry\//.test(u.pathname) || /^consent\./i.test(u.hostname)) {
+      const c = u.searchParams.get("continue");
+      if (c) { cur = decodeURIComponent(c); continue; }
+      return { finalUrl: cur, html: "", blocked: true };
     }
+    if (isMapsPage(u)) return { finalUrl: cur, html: "" };
     const r = await fetch(cur, { redirect: "manual", headers: { "User-Agent": UA, "Accept-Language": "ja,en;q=0.5" } });
     const loc = r.headers.get("location");
     if (r.status >= 300 && r.status < 400 && loc) { cur = new URL(loc, cur).href; continue; }
@@ -138,6 +150,8 @@ export default async (req) => {
 
     const { finalUrl, html } = await resolve(link);
     const info = { ...fromHtml(html), ...parseMapsUrl(finalUrl) };
+    // 英数字だけの長い文字列（確認画面の識別子など）は店舗名として使わない
+    if (info.name && /^[A-Za-z0-9_-]{25,}$/.test(info.name)) delete info.name;
     const notes = [];
 
     // 貼り付け時に混ざりがちな空白・改行・引用符を取り除く
