@@ -100,7 +100,18 @@ async function placesLookup(key, name, lat, lng) {
     body: JSON.stringify(body)
   });
   const j = await r.json();
-  if (!r.ok) throw new Error(j?.error?.message || `Places API ${r.status}`);
+  if (!r.ok) {
+    const reason = j?.error?.details?.find((d) => d.reason)?.reason || j?.error?.status || "";
+    const hint = {
+      API_KEY_INVALID: "キーの文字列が正しくありません。Google Cloudの「認証情報」からキーをコピーし直し、Netlifyの GOOGLE_MAPS_API_KEY に貼り直してください",
+      SERVICE_DISABLED: "Google Cloudで「Places API (New)」が有効になっていません",
+      API_KEY_SERVICE_BLOCKED: "キーの「APIの制限」で Places API (New) が許可されていません",
+      API_KEY_HTTP_REFERRER_BLOCKED: "キーの「アプリケーションの制限」をウェブサイトにしていると使えません（「なし」にしてください）",
+      BILLING_DISABLED: "Google Cloudの請求先アカウントが有効になっていません",
+      PERMISSION_DENIED: "このキーではPlaces APIを使う権限がありません（APIの有効化・キーの制限を確認してください）"
+    }[reason];
+    throw new Error(hint || j?.error?.message || `Places API ${r.status}`);
+  }
   const p = j.places?.[0];
   if (!p) return {};
   return {
@@ -129,7 +140,8 @@ export default async (req) => {
     const info = { ...fromHtml(html), ...parseMapsUrl(finalUrl) };
     const notes = [];
 
-    const key = process.env.GOOGLE_MAPS_API_KEY;
+    // 貼り付け時に混ざりがちな空白・改行・引用符を取り除く
+    const key = (process.env.GOOGLE_MAPS_API_KEY || "").trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
     if (key && (info.name || info.lat)) {
       try { Object.assign(info, Object.fromEntries(Object.entries(await placesLookup(key, info.name || `${info.lat},${info.lng}`, info.lat, info.lng)).filter(([, v]) => v))); }
       catch (e) { notes.push("店舗の詳細（電話番号など）を取得できませんでした：" + e.message); }
