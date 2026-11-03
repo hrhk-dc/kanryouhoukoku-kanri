@@ -2,7 +2,7 @@
 
 株式会社DCの完了報告・翌日訪問リストのアプリです。
 
-- アプリ：https://dc-houkoku.pages.dev/
+- アプリ：https://kanryouhoukoku-kanri.pages.dev/
 - このリポジトリの `main` ブランチに変更を入れると、Cloudflare Pages が自動で公開します（ビルドなし・公開フォルダは `public`）。
 
 ## ファイル構成
