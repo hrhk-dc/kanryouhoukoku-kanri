@@ -1,8 +1,8 @@
-// Googleマップのリンクから店舗情報を読み取る（Netlify Function）
+// Googleマップのリンクから店舗情報を読み取る（Cloudflare Pages Functions：/api/maps-info）
 //  1. 短縮リンク（maps.app.goo.gl）をたどって本来のURLを取得
 //  2. URLから店舗名と緯度経度を取り出す
 //  3. 国土地理院の逆ジオコーダーで「○○県○○市／区」と町名を取得（無料・キー不要）
-//  4. Netlifyの環境変数 GOOGLE_MAPS_API_KEY があれば、Google Places APIで
+//  4. Cloudflareの環境変数 GOOGLE_MAPS_API_KEY があれば、Google Places APIで
 //     住所・電話番号・営業時間・業種・評価・ホームページも取得
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36";
@@ -115,7 +115,7 @@ async function placesLookup(key, name, lat, lng) {
   if (!r.ok) {
     const reason = j?.error?.details?.find((d) => d.reason)?.reason || j?.error?.status || "";
     const hint = {
-      API_KEY_INVALID: "キーの文字列が正しくありません。Google Cloudの「認証情報」からキーをコピーし直し、Netlifyの GOOGLE_MAPS_API_KEY に貼り直してください",
+      API_KEY_INVALID: "キーの文字列が正しくありません。Google Cloudの「認証情報」からキーをコピーし直し、Cloudflareの GOOGLE_MAPS_API_KEY に貼り直してください",
       SERVICE_DISABLED: "Google Cloudで「Places API (New)」が有効になっていません",
       API_KEY_SERVICE_BLOCKED: "キーの「APIの制限」で Places API (New) が許可されていません",
       API_KEY_HTTP_REFERRER_BLOCKED: "キーの「アプリケーションの制限」をウェブサイトにしていると使えません（「なし」にしてください）",
@@ -138,7 +138,7 @@ async function placesLookup(key, name, lat, lng) {
   };
 }
 
-export default async (req) => {
+async function handle(req, env) {
   const headers = { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" };
   try {
     const link = new URL(req.url).searchParams.get("url") || "";
@@ -155,7 +155,7 @@ export default async (req) => {
     const notes = [];
 
     // 貼り付け時に混ざりがちな空白・改行・引用符を取り除く
-    const key = (process.env.GOOGLE_MAPS_API_KEY || "").trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
+    const key = (env.GOOGLE_MAPS_API_KEY || "").trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
     if (key && (info.name || info.lat)) {
       try { Object.assign(info, Object.fromEntries(Object.entries(await placesLookup(key, info.name || `${info.lat},${info.lng}`, info.lat, info.lng)).filter(([, v]) => v))); }
       catch (e) {
@@ -179,6 +179,6 @@ export default async (req) => {
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: "読み取り中にエラーが起きました：" + e.message }), { status: 200, headers });
   }
-};
+}
 
-export const config = { path: "/api/maps-info" };
+export const onRequestGet = ({ request, env }) => handle(request, env);
