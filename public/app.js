@@ -447,6 +447,7 @@ function subscribe() {
 
   unsubs.push(onSnapshot(query(collection(db, "visits"), orderBy("createdAt", "desc")), (snap) => {
     visits = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    applyDemoUrls();
     renderVisitList();
     renderAllExtras();
   }, (err) => showBanner(err, "訪問リストの読み込み")));
@@ -458,6 +459,7 @@ function subscribe() {
     }, (err) => showBanner(err, "利用申請の読み込み")));
   }
   restoreDrafts();
+  loadDemoUrls();
 }
 
 /* フォーマットの整え：
@@ -2002,7 +2004,8 @@ $("#copyClaudeBatch").addEventListener("click", () => {
   if (!items.length) { toast("明日の訪問先にGoogleマップのリンクがありません"); return; }
   const text = [
     `次の${items.length}件のGoogleマップのリンクから、それぞれデモサイトを作ってください。`,
-    `作り終わったら、案件番号ごとに公開URLを登録してください（登録先：${location.origin}/api/demo-url ／ POSTで {"caseNo":"案件番号","url":"公開URL","token":"（Netlifyに設定した連携キー）"}）。`,
+    `作り終わったら、1件ずつ次のコマンドで公開URLを登録してください（「合言葉」の部分は INTEGRATION_TOKEN の値に置き換え）。`,
+    `curl -sS -X POST ${location.origin}/api/demo-url -H "Content-Type: application/json" -d '{"caseNo":"案件番号","url":"公開URL","token":"合言葉"}'`,
     "",
     ...items.map(({ v, maps }) => `${v.caseNo}　${textOf(v, "shopName")}（${placeOf(v)}）\n${maps}`)
   ].join("\n");
@@ -2015,3 +2018,30 @@ function renderAllExtras() {
   if (!$("#tab-stats").classList.contains("hidden")) renderStats();
   if (isAdmin()) renderMembers();
 }
+
+
+/* ---------- Claude Codeで登録されたデモサイトURL（Netlify側に保存）を訪問先に付ける ---------- */
+let demoUrls = {};
+let demoTimer = null;
+function applyDemoUrls() {
+  visits.forEach((v) => {
+    const d = v.caseNo && demoUrls[String(v.caseNo).toUpperCase()];
+    if (d?.url) v.demoUrl = d.url;
+  });
+}
+async function loadDemoUrls() {
+  clearTimeout(demoTimer);
+  if (!currentUser) return;
+  try {
+    const t = await currentUser.getIdToken();
+    const r = await fetch("/api/demo-url", { headers: { Authorization: `Bearer ${t}` }, cache: "no-store" });
+    if (r.ok) {
+      const j = await r.json();
+      const before = JSON.stringify(demoUrls);
+      demoUrls = j.items || {};
+      if (JSON.stringify(demoUrls) !== before) { applyDemoUrls(); renderVisitList(); renderAllExtras(); }
+    }
+  } catch { /* 取得できなくてもアプリは使える */ }
+  demoTimer = setTimeout(loadDemoUrls, 5 * 60 * 1000); // 5分ごとに確認
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && dataLoaded) loadDemoUrls(); });

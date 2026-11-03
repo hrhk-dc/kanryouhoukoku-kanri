@@ -1,0 +1,9 @@
+{
+  "name": "kanryouhoukoku-kanri",
+  "private": true,
+  "description": "株式会社DC 完了報告アプリ",
+  "type": "module",
+  "dependencies": {
+    "@netlify/blobs": "^11.1.7"
+  }
+}
