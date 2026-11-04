@@ -297,3 +297,5 @@ body:not(.logged-in) .hidden-logged-out { display: none; }
 .stat-table.daily .st-head span:first-child, .stat-table.daily .st-row span:first-child { text-align: left; }
 .visit-sub .vtime { display: inline-flex; align-items: center; gap: 4px; margin: 0; font-weight: 400; }
 .visit-sub .vtime select { width: auto; margin: 0; }
+.tag.cat { background: #fff4e0; border-color: #f0d9aa; color: #7a4b00; }
+.tag.none { background: #f4f4f4; border-color: #ddd; color: #888; }

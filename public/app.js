@@ -936,6 +936,7 @@ function renderList() {
     const caseNo = firstOfType(r.items, ["caseNo"]);
     const subs = [
       caseNo && `<span class="case-no">${esc(caseNo)}</span>`,
+      (() => { const v = visitOfReport(r); const ad = v ? addressOf(v) : ""; return ad && `🏠 ${esc(ad)}`; })(),
       itemVal(r.items, "visitTo") && itemVal(r.items, "visitTo") !== title && `📍 ${esc(itemVal(r.items, "visitTo"))}`,
       itemVal(r.items, "personName") && `👤 ${esc(itemVal(r.items, "personName"))}`,
       firstOfType(r.items, ["datetime"]) && `🕒 受付 ${esc(firstOfType(r.items, ["datetime"]).replace("T", " "))}`
@@ -1334,6 +1335,10 @@ function placeParts(v) {
   }
   return { prefecture, city, ward };
 }
+/* 業種：項目の名前が違っていても「業種・ジャンル・カテゴリ」の項目から取る */
+const catOf = (v) => textOf(v, "category") || (v.items || []).find((i) => /業種|ジャンル|カテゴリ/.test(i.label || "") && i.value)?.value || "";
+/* 住所：住所の項目がなければ 県・市・区 をつなげる */
+const addressOf = (v) => textOf(v, "address") || (v.items || []).find((i) => /住所|所在地/.test(i.label || "") && i.value)?.value || placeOf(v);
 const shopOf = (v) => cleanName(textOf(v, "shopName")) || textOf(v, "shopName") || "";
 const placeOf = (v) => { const p = placeParts(v); return [p.prefecture, p.city, p.ward].join("") || textOf(v, "area"); };
 const created = (v) => (v.createdAt?.toMillis ? v.createdAt.toMillis() : Date.now() + 1e12);
@@ -1500,15 +1505,16 @@ function renderVisitList() {
     const subIds = ["area", "prefecture", "city", "ward", "category", "hours"];
     const time = items.find((i) => i.type === "time" && i.value)?.value || "";
     const pp = placeParts(v);
-    const cat = textOf(v, "category");
+    const cat = catOf(v);
     const hoursTxt = textOf(v, "hours");
     const when = [
       !grouped && v.visitDate ? `📅 ${esc(fmtDateJa(v.visitDate))}` : "",
       timeSelectHtml(v, time)
     ].filter(Boolean).join(" ");
-    const tags = [["都道府県", pp.prefecture], ["市", pp.city], ["区", pp.ward], ["業種", cat]]
+    const tags = [["都道府県", pp.prefecture], ["市", pp.city], ["区", pp.ward]]
       .filter(([, val]) => val)
-      .map(([k, val]) => `<span class="tag" title="${k}">${esc(val)}</span>`).join("");
+      .map(([k, val]) => `<span class="tag" title="${k}">${esc(val)}</span>`).join("") +
+      (cat ? `<span class="tag cat" title="業種">🏷 ${esc(cat)}</span>` : `<span class="tag none" title="業種">🏷 業種：未取得</span>`);
     const hoursHtml = hoursTxt ? `<p class="visit-hours">🕒 営業時間：${esc(hoursTxt.split("\n")[0])}${hoursTxt.includes("\n") ? ` <small>ほか（下の「店舗の詳細」に全部あります）</small>` : ""}</p>` : "";
     const moveBtns = sort === "manual" ? `<span class="move-btns"><button class="btn small" type="button" data-vmove="-1" data-id="${esc(v.id)}" title="上へ">↑</button><button class="btn small" type="button" data-vmove="1" data-id="${esc(v.id)}" title="下へ">↓</button></span>` : "";
     const rest = items.filter((i, k) => k !== titleIdx && !subIds.includes(i.id) && i.type !== "time");
@@ -1525,7 +1531,7 @@ function renderVisitList() {
     html += `<div class="visit-item${st.done ? " is-done" : ""}">
       <div class="report-head"><p class="report-title">${esc(cleanName(title) || title)}</p><span class="btn-row" style="margin:0;align-items:center">${caseTag}</span></div>
       <p class="visit-sub">${when}${moveBtns}</p>
-      ${tags ? `<div class="tags">${tags}</div>` : ""}
+      <div class="tags">${tags}</div>
       ${hoursHtml}
       <div class="btn-row visit-status">${st.html}
         ${st.done ? "" : `<button class="btn small primary" type="button" data-report-visit="${esc(v.id)}">この訪問を報告する</button>`}
@@ -1837,7 +1843,7 @@ function visitMiniHtml(v, opts = {}) {
   return `<div class="mini-row">
     <div class="mini-main">
       <div class="mini-title">${time ? `<b>${esc(fmtHour(time))}</b> ` : ""}${v.caseNo ? `<span class="case-no">${esc(v.caseNo)}</span> ` : ""}${esc(shopOf(v) || "（店舗名なし）")}</div>
-      <div class="mini-sub">${[opts.showDate && fmtDateJa(v.visitDate), placeOf(v), textOf(v, "category")].filter(Boolean).map(esc).join(" · ")}</div>
+      <div class="mini-sub">${[opts.showDate && fmtDateJa(v.visitDate), placeOf(v), catOf(v)].filter(Boolean).map(esc).join(" · ")}</div>
     </div>
     <div class="btn-row" style="margin:0">${st.html}
       ${maps ? `<a class="btn small" href="${esc(maps)}" target="_blank" rel="noopener">地図</a>` : ""}

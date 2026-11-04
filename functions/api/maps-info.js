@@ -127,6 +127,7 @@ async function gsiAddress(lat, lng) {
   return { prefecture: m.pref || "", city: m.city || "", ward: m.ward || "", town: res.lv01Nm && res.lv01Nm !== "－" ? res.lv01Nm : "" };
 }
 
+const TYPE_JA = { restaurant: "レストラン", cafe: "カフェ", bar: "バー", bakery: "ベーカリー", ramen_restaurant: "ラーメン店", japanese_restaurant: "和食店", sushi_restaurant: "寿司店", meal_takeaway: "テイクアウト", store: "店舗", clothing_store: "衣料品店", beauty_salon: "美容室", hair_care: "美容室", spa: "スパ", gym: "ジム", dentist: "歯科", doctor: "医院", pharmacy: "薬局", hotel: "ホテル", lodging: "宿泊施設", supermarket: "スーパー", convenience_store: "コンビニ", car_repair: "自動車整備", car_dealer: "自動車販売", real_estate_agency: "不動産", school: "学校", florist: "花屋", book_store: "書店", shopping_mall: "ショッピングモール", food: "飲食店" };
 async function placesLookup(key, name, lat, lng) {
   const body = { textQuery: name, languageCode: "ja", regionCode: "JP" };
   if (lat && lng) body.locationBias = { circle: { center: { latitude: lat, longitude: lng }, radius: 300 } };
@@ -137,7 +138,7 @@ async function placesLookup(key, name, lat, lng) {
       "X-Goog-Api-Key": key,
       "X-Goog-FieldMask": [
         "places.displayName", "places.formattedAddress", "places.nationalPhoneNumber",
-        "places.regularOpeningHours.weekdayDescriptions", "places.primaryTypeDisplayName",
+        "places.regularOpeningHours.weekdayDescriptions", "places.primaryTypeDisplayName", "places.primaryType", "places.types",
         "places.rating", "places.userRatingCount", "places.websiteUri", "places.location", "places.addressComponents"
       ].join(",")
     },
@@ -172,7 +173,7 @@ async function placesLookup(key, name, lat, lng) {
     address: (p.formattedAddress || "").replace(/^日本、?\s*/, "").replace(/^〒\d{3}-\d{4}\s*/, ""),
     phone: p.nationalPhoneNumber || "",
     hours: (p.regularOpeningHours?.weekdayDescriptions || []).join("\n"),
-    category: p.primaryTypeDisplayName?.text || "",
+    category: p.primaryTypeDisplayName?.text || TYPE_JA[p.primaryType] || TYPE_JA[(p.types || []).find((t) => TYPE_JA[t])] || "",
     rating: p.rating ? `★${p.rating}（${p.userRatingCount || 0}件）` : "",
     website: p.websiteUri || "",
     lat: p.location?.latitude, lng: p.location?.longitude
