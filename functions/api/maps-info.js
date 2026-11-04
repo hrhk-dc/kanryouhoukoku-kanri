@@ -85,6 +85,38 @@ function fromHtml(html) {
   return out;
 }
 
+
+// 住所の文字列から 都道府県／市／区 を分ける（座標から取れなかった時の予備）
+function splitPlace(text) {
+  const t = String(text || "").replace(/^日本[、,]?\s*/, "").replace(/〒?\s*\d{3}-?\d{4}\s*/, "").trim();
+  const m = t.match(/^(北海道|東京都|京都府|大阪府|.{2,3}?県)\s*(.*)$/);
+  if (!m) return {};
+  const pref = m[1];
+  const rest = m[2];
+  let city = "", ward = "";
+  if (pref === "東京都") {
+    const w = rest.match(/^([^市区]+区)/);
+    if (w) ward = w[1];
+    else { const c = rest.match(/^(.+?市)/); if (c) city = c[1]; }
+  } else {
+    const c = rest.match(/^(.+?市|.+?郡[^市区町村]+[町村]|[^市区]+?[町村])/);
+    if (c) city = c[1];
+    const w = rest.slice(city.length).match(/^([^市区]+区)/);
+    if (w) ward = w[1];
+  }
+  return { prefecture: pref, city, ward };
+}
+
+// 店舗名に住所などが続けて入っていたら、店舗名の部分だけにする
+function cleanName(name) {
+  let n = String(name || "").split(/\r?\n/)[0].trim();
+  const i = n.search(/〒|\d{3}-\d{4}|(北海道|東京都|京都府|大阪府|[^\s、,]{2,3}県)[^\s]*?[市区町村郡]/);
+  let rest = "";
+  if (i > 0) { rest = n.slice(i); n = n.slice(0, i); }
+  n = n.replace(/[\s　、,・｜|]+$/, "").trim();
+  return { name: n, rest: rest.trim() };
+}
+
 async function gsiAddress(lat, lng) {
   const r = await fetch(`https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${lat}&lon=${lng}`);
   const j = await r.json();
@@ -106,7 +138,7 @@ async function placesLookup(key, name, lat, lng) {
       "X-Goog-FieldMask": [
         "places.displayName", "places.formattedAddress", "places.nationalPhoneNumber",
         "places.regularOpeningHours.weekdayDescriptions", "places.primaryTypeDisplayName",
-        "places.rating", "places.userRatingCount", "places.websiteUri", "places.location"
+        "places.rating", "places.userRatingCount", "places.websiteUri", "places.location", "places.addressComponents"
       ].join(",")
     },
     body: JSON.stringify(body)
@@ -126,7 +158,16 @@ async function placesLookup(key, name, lat, lng) {
   }
   const p = j.places?.[0];
   if (!p) return {};
+  // 住所の部品から 都道府県／市／区 を取り出す
+  const comp = (type) => (p.addressComponents || []).find((c) => (c.types || []).includes(type))?.longText || "";
+  const pref = comp("administrative_area_level_1");
+  const loc = comp("locality");
+  const sub = comp("sublocality_level_1");
+  let city = loc, ward = "";
+  if (/区$/.test(loc)) { ward = loc; city = ""; }
+  if (/区$/.test(sub) && !ward) ward = sub;
   return {
+    pPrefecture: pref, pCity: city, pWard: ward,
     name: p.displayName?.text || "",
     address: (p.formattedAddress || "").replace(/^日本、?\s*/, "").replace(/^〒\d{3}-\d{4}\s*/, ""),
     phone: p.nationalPhoneNumber || "",
@@ -171,6 +212,21 @@ async function handle(req, env) {
       try { Object.assign(info, await gsiAddress(info.lat, info.lng)); }
       catch (e) { notes.push("地域（県・市区）を取得できませんでした"); }
     }
+    // 県・市・区は別々の項目で返す。座標から取れなければ、Googleの住所の部品 → 住所の文字 の順で補う
+    const fb = splitPlace(info.address);
+    if (!info.prefecture) info.prefecture = info.pPrefecture || fb.prefecture || "";
+    if (!info.city && !info.ward) {
+      info.city = info.pCity || fb.city || "";
+      info.ward = info.pWard || fb.ward || "";
+    }
+    delete info.pPrefecture; delete info.pCity; delete info.pWard;
+    // 店舗名に住所などが混ざっていたら取り除く
+    if (info.name) {
+      const c = cleanName(info.name);
+      if (c.name) info.name = c.name;
+      if (c.rest && !info.address) info.address = c.rest.replace(/^〒?\s*\d{3}-?\d{4}\s*/, "");
+    }
+    if (!info.prefecture && info.address) Object.assign(info, Object.fromEntries(Object.entries(splitPlace(info.address)).filter(([, v]) => v)));
     info.area = [info.prefecture, info.city, info.ward].filter(Boolean).join("");
     if (!info.address && info.area) info.address = info.area + (info.town || "");
 

@@ -108,6 +108,10 @@
     <div id="tab-today" class="tab-panel">
       <div class="card">
         <h2 id="todayTitle">今日の予定</h2>
+        <div class="seg" id="todaySeg">
+          <button type="button" class="seg-btn active" data-day="0">今日</button>
+          <button type="button" class="seg-btn" data-day="1">明日</button>
+        </div>
         <div id="todayVisits"></div>
       </div>
       <div class="card">
@@ -131,7 +135,7 @@
               <option value="old">報告が古い順</option>
               <option value="nextDate">次回予定日が近い順</option>
               <option value="received">受付日時が新しい順</option>
-              <option value="caseName">案件名順（あいうえお）</option>
+              <option value="caseName">店舗名順（あいうえお）</option>
             </select>
           </label>
           <label>結果
@@ -207,6 +211,7 @@
               <option value="dateTime">訪問日・時刻が早い順</option>
               <option value="area">地域順（県・市区）</option>
               <option value="shop">店舗名順（あいうえお）</option>
+              <option value="manual">手動（↑↓で自分で並べ替え）</option>
             </select>
           </label>
           <div class="btn-row">
@@ -224,17 +229,37 @@
     <div id="tab-stats" class="tab-panel hidden">
       <div class="card">
         <h2>集計</h2>
-        <div class="filter-row">
-          <label>期間
-            <select id="statsPeriod"></select>
+        <div class="filter-row stats-filter">
+          <label>集計の単位
+            <select id="statsUnit">
+              <option value="day">日</option>
+              <option value="week">週</option>
+              <option value="month" selected>月</option>
+              <option value="year">年</option>
+              <option value="custom">期間を指定</option>
+              <option value="all">全期間</option>
+            </select>
           </label>
+          <div class="stats-pick">
+            <button class="btn small" type="button" id="statsPrev" title="前へ">◀</button>
+            <input type="date" id="statsDay" class="hidden">
+            <input type="month" id="statsMonthIn" class="hidden">
+            <select id="statsYear" class="hidden"></select>
+            <span id="statsRangeText" class="hint"></span>
+            <input type="date" id="statsFrom" class="hidden"><span id="statsTilde" class="hidden">〜</span><input type="date" id="statsTo" class="hidden">
+            <button class="btn small" type="button" id="statsNext" title="次へ">▶</button>
+            <button class="btn small" type="button" id="statsNow">今に戻る</button>
+          </div>
         </div>
         <div id="statsSummary" class="stats-summary"></div>
+        <h3 class="stats-h">日報（数字）</h3>
+        <div id="statsDaily"></div>
+        <div class="btn-row"><button class="btn small primary" type="button" id="copyDaily">日報をコピー（LINE・メール用）</button></div>
         <h3 class="stats-h">担当者別</h3>
         <div id="statsPerson"></div>
         <h3 class="stats-h">地域別（都道府県・市区）</h3>
         <div id="statsArea"></div>
-        <h3 class="stats-h">月別の推移</h3>
+        <h3 class="stats-h" id="statsTrendTitle">推移</h3>
         <div id="statsMonth"></div>
       </div>
     </div>
@@ -260,6 +285,13 @@
           <button class="btn" type="button" id="exportReports">完了報告をダウンロード</button>
           <button class="btn" type="button" id="exportVisits">訪問リストをダウンロード</button>
         </div>
+      </div>
+
+      <div class="card">
+        <h2>訪問先の読み取り直し</h2>
+        <p class="hint">登録済みの訪問先のうち、店舗名に住所などが混ざっているもの・県/市/区が空のものを、Googleマップのリンクから読み取り直して、店舗名／都道府県／市／区／業種／営業時間を別々の項目に入れ直します。</p>
+        <div class="btn-row"><button class="btn" type="button" id="repairVisits">読み取り直しを実行</button></div>
+        <p class="hint" id="repairResult"></p>
       </div>
 
       <div class="card">

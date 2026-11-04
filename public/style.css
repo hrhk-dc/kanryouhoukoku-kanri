@@ -273,3 +273,27 @@ body:not(.logged-in) .hidden-logged-out { display: none; }
 .st-won, .stats-summary .st-won b { color: #1b7a3a; font-weight: 700; }
 .bar { display: inline-block; height: 8px; background: #c7d7fb; border-radius: 4px; margin-right: 6px; vertical-align: middle; }
 @media (max-width: 480px) { .stats-summary { grid-template-columns: repeat(2, 1fr); } }
+
+/* 今日／明日 切り替え */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; margin: 2px 0 10px; }
+.seg-btn { border: 0; background: #fff; padding: 6px 18px; font-size: 14px; cursor: pointer; }
+.seg-btn.active { background: var(--primary); color: #fff; font-weight: 700; }
+
+/* 訪問リスト：県・市・区・業種を別々のラベルで */
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }
+.tag { background: #eef3fb; border: 1px solid #d5e0f2; color: #26436e; border-radius: 6px; padding: 2px 8px; font-size: 12.5px; }
+.visit-hours { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+.visit-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.vtime select { font-size: 14px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.move-btns { margin-left: auto; display: inline-flex; gap: 4px; }
+.row-when { margin: 4px 0; }
+.row-when select, .row-when input { max-width: 180px; }
+
+/* 集計 */
+.stats-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.stats-pick input, .stats-pick select { width: auto; }
+.stat-table.daily .st-head, .stat-table.daily .st-row { grid-template-columns: 1.6fr repeat(var(--cols, 5), minmax(34px, 1fr)); }
+.stat-table.daily .st-head span, .stat-table.daily .st-row span { text-align: center; }
+.stat-table.daily .st-head span:first-child, .stat-table.daily .st-row span:first-child { text-align: left; }
+.visit-sub .vtime { display: inline-flex; align-items: center; gap: 4px; margin: 0; font-weight: 400; }
+.visit-sub .vtime select { width: auto; margin: 0; }

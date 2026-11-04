@@ -493,9 +493,11 @@ function normalizeFormat(key) {
 
 /* ---------- 自分の名前（担当者名の自動入力） ---------- */
 let myName = "";
+let myOrder = []; // 訪問リストの「手動の並び順」（自分用）
 function subscribeMe() {
   unsubs.push(onSnapshot(doc(db, "users", currentUser.uid), (snap) => {
     myName = (snap.exists() && snap.data().name) || "";
+    myOrder = (snap.exists() && Array.isArray(snap.data().visitOrder)) ? snap.data().visitOrder : [];
     $("#myNameLabel").textContent = myName ? `👤 ${myName}` : "👤 名前を設定";
     renderVisitList();
     renderList();
@@ -509,7 +511,7 @@ function subscribeMe() {
   }));
 }
 async function saveMyName(name) {
-  await setDoc(doc(db, "users", currentUser.uid), { name, email: currentUser.email, updatedAt: serverTimestamp() });
+  await setDoc(doc(db, "users", currentUser.uid), { name, email: currentUser.email, updatedAt: serverTimestamp() }, { merge: true });
 }
 $("#myNameLabel").addEventListener("click", () => {
   $("#namePanel").classList.toggle("hidden");
@@ -537,6 +539,7 @@ document.addEventListener("change", async (e) => {
 
 /* ---------- タブ ---------- */
 function showTab(name) {
+  if ((name === "stats" || name === "admin") && !isAdmin()) name = "today"; // 集計・管理は管理者のみ
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
   ["today", "list", "form", "visits", "stats", "admin"].forEach((n) => $(`#tab-${n}`)?.classList.toggle("hidden", n !== name));
   if (name === "today") renderToday();
@@ -871,7 +874,7 @@ const SORTERS = {
   old: (a, b) => tsNum(a.createdAt) - tsNum(b.createdAt),
   received: (a, b) => byEmptyLast(firstOfType(b.items, ["datetime"]), firstOfType(a.items, ["datetime"])),
   nextDate: (a, b) => byEmptyLast(firstOfType(naItemsOf(a), ["date", "datetime"]), firstOfType(naItemsOf(b), ["date", "datetime"])),
-  caseName: (a, b) => byEmptyLast(itemVal(a.items, "caseName"), itemVal(b.items, "caseName"), true)
+  caseName: (a, b) => byEmptyLast(reportTitle(a), reportTitle(b), true)
 };
 function byEmptyLast(x, y, ja = false) {
   if (!x && !y) return 0;
@@ -928,12 +931,12 @@ function renderList() {
   }
 
   $("#reportList").innerHTML = list.map((r) => {
-    const title = itemVal(r.items, "caseName") || "（案件名なし）";
+    const title = reportTitle(r);
     const result = itemVal(r.items, "result");
     const caseNo = firstOfType(r.items, ["caseNo"]);
     const subs = [
       caseNo && `<span class="case-no">${esc(caseNo)}</span>`,
-      itemVal(r.items, "visitTo") && `📍 ${esc(itemVal(r.items, "visitTo"))}`,
+      itemVal(r.items, "visitTo") && itemVal(r.items, "visitTo") !== title && `📍 ${esc(itemVal(r.items, "visitTo"))}`,
       itemVal(r.items, "personName") && `👤 ${esc(itemVal(r.items, "personName"))}`,
       firstOfType(r.items, ["datetime"]) && `🕒 受付 ${esc(firstOfType(r.items, ["datetime"]).replace("T", " "))}`
     ].filter(Boolean);
@@ -991,7 +994,7 @@ $("#reportList").addEventListener("click", async (e) => {
   if (!r || !canModify(r)) return;
   if (btn.dataset.edit) startEdit(r);
   if (btn.dataset.del) {
-    if (!confirm(`「${itemVal(r.items, "caseName") || "この報告"}」を削除しますか？元に戻せません。`)) return;
+    if (!confirm(`「${reportTitle(r)}」を削除しますか？元に戻せません。`)) return;
     try { await deleteDoc(doc(db, "reports", r.id)); toast("削除しました"); }
     catch (err) { showBanner(err, "削除"); }
   }
@@ -1025,7 +1028,8 @@ const isAutoField = (f) => f.type !== "maps" && !!(f.auto || LOOKUP_MAP[f.id] ||
 function renderVisitRows() {
   if (editingVisitId && !visitRows.length) visitRows = [{}];
   const linkFields = formats.visit.filter((f) => f.type === "maps");
-  const otherFields = formats.visit.filter((f) => f.type !== "maps");
+  const timeFields = formats.visit.filter((f) => f.type === "time"); // 訪問予定時刻は見える場所に出す
+  const otherFields = formats.visit.filter((f) => f.type !== "maps" && f.type !== "time");
   $("#visitRows").innerHTML = visitRows.length ? visitRows.map((vals, idx) => `
     <div class="row-card" data-row="${idx}">
       <div class="row-card-head">
@@ -1033,9 +1037,11 @@ function renderVisitRows() {
         ${editingVisitId ? "" : `<button class="btn small danger" type="button" data-remove-row="${idx}">この件を削除</button>`}
       </div>
       ${fieldsHtml(linkFields, vals)}
+      ${timeFields.length ? `<div class="row-when">${fieldsHtml(timeFields, vals)}</div>` : ""}
       <div class="row-summary"></div>
+      <div class="btn-row" style="margin:4px 0"><button class="btn small" type="button" data-relookup="${idx}">🔄 マップから読み取り直す（店舗名・県・市・区・業種・営業時間を上書き）</button></div>
       <details class="row-more"${editingVisitId || !linkFields.length ? " open" : ""}>
-        <summary>読み取った内容を確認・修正（店舗名・地域・営業時間など）</summary>
+        <summary>読み取った内容を確認・修正（店舗名・都道府県・市・区・業種・営業時間など）</summary>
         ${fieldsHtml(otherFields, vals, isAutoField)}
       </details>
     </div>`).join("") : `<p class="rows-empty">上にGoogleマップのリンクを貼ると、ここに1件ずつカードができます</p>`;
@@ -1122,14 +1128,14 @@ async function mapsLookup(url) {
 }
 // 読み取った値を、その行の「空欄」にだけ入れる（入力済みは上書きしない）
 const LOOKUP_MAP = { shopName: "name", prefecture: "prefecture", city: "city", ward: "ward", area: "area", address: "address", category: "category", phone: "phone", hours: "hours", rating: "rating", website: "website" };
-function applyLookup(row, info) {
+function applyLookup(row, info, overwrite = false) {
   let n = 0;
   row.querySelectorAll("[data-field-id]").forEach((el) => {
     const id = el.dataset.fieldId;
     const label = formats.visit.find((f) => f.id === id)?.label || "";
     // 管理者が追加した項目でも、名前で判断して入れる
     const key = LOOKUP_MAP[id] || autoKeyByLabel(label, el.type);
-    if (key && info[key] && !el.value) { el.value = info[key]; n++; }
+    if (key && info[key] && (overwrite || !el.value)) { el.value = info[key]; n++; }
   });
   updateRowSummary(row);
   return n;
@@ -1141,11 +1147,13 @@ function updateRowSummary(row) {
   if (!box) return;
   const val = (id) => row.querySelector(`[data-field-id="${CSS.escape(id)}"]`)?.value.trim() || "";
   const name = val("shopName");
-  const place = [val("prefecture"), val("city"), val("ward")].join("") || val("area");
   const hours = val("hours").split("\n")[0];
+  const parts = [["都道府県", val("prefecture")], ["市", val("city")], ["区", val("ward")], ["業種", val("category")]].filter(([, x]) => x);
+  const place = parts.length || val("area");
   box.innerHTML = name || place ? `
     <div class="sum-name">${esc(name || "（店舗名なし）")}</div>
-    <div class="sum-sub">${[place && `📍 ${esc(place)}`, val("category") && `🏷 ${esc(val("category"))}`, hours && `🕒 ${esc(hours)}${val("hours").includes("\n") ? " ほか" : ""}`].filter(Boolean).join("<span class=\"sep\"> · </span>")}</div>` : "";
+    <div class="tags">${parts.map(([k, x]) => `<span class="tag" title="${k}">${esc(x)}</span>`).join("") || (val("area") ? `<span class="tag">${esc(val("area"))}</span>` : "")}</div>
+    ${hours ? `<div class="sum-sub">🕒 営業時間：${esc(hours)}${val("hours").includes("\n") ? " ほか" : ""}</div>` : ""}` : "";
 }
 function setRowStatus(row, text, cls = "") {
   let s = row.querySelector(".lookup-status");
@@ -1158,15 +1166,16 @@ function setRowStatus(row, text, cls = "") {
   s.textContent = text;
   s.className = `lookup-status ${cls}`;
 }
-async function lookupRow(row) {
+async function lookupRow(row, overwrite = false) {
   const mapsInput = [...row.querySelectorAll("[data-field-id]")].find((el) => formats.visit.find((f) => f.id === el.dataset.fieldId)?.type === "maps");
   const url = mapsInput?.value.trim();
   if (!url || !MAPS_REGEX.test(url)) return null;
   setRowStatus(row, "マップから店舗情報を読み取り中…");
   try {
+    if (overwrite) lookupCache.delete(url);
     const info = await mapsLookup(url);
     if (!info.ok) { setRowStatus(row, `読み取れませんでした：${info.error || "不明な理由"}（手入力してください）`, "ng"); return info; }
-    const n = applyLookup(row, info);
+    const n = applyLookup(row, info, overwrite);
     const what = [info.name, info.area].filter(Boolean).join("・");
     const note = (info.notes || []).join(" / ");
     const dup = duplicateNote(row, info);
@@ -1178,6 +1187,16 @@ async function lookupRow(row) {
     return null;
   }
 }
+$("#visitRows").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-relookup]");
+  if (!b) return;
+  const row = b.closest(".row-card");
+  b.disabled = true;
+  const info = await lookupRow(row, true);
+  b.disabled = false;
+  if (info?.ok) { const more = row.querySelector(".row-more"); if (more) more.open = true; }
+  else if (!info) toast("先にGoogleマップのリンクを入れてください");
+});
 // マップのURLを貼ったら自動で読み取る
 $("#visitRows").addEventListener("change", (e) => {
   const el = e.target.closest("[data-field-id]");
@@ -1281,15 +1300,63 @@ $("#visitSort").addEventListener("change", renderVisitList);
 const caseNum = (v) => caseSeq(v.caseNo);
 const timeOf = (v) => (v.items || []).find((i) => i.type === "time")?.value || "99:99";
 const textOf = (v, id) => (v.items || []).find((i) => i.id === id)?.value || "";
-const placeOf = (v) => [textOf(v, "prefecture"), textOf(v, "city"), textOf(v, "ward")].join("") || textOf(v, "area");
+/* 住所の文字から 都道府県／市／区 を分ける（項目が空のときの予備） */
+function splitPlace(text) {
+  const t = String(text || "").replace(/^日本[、,]?\s*/, "").replace(/〒?\s*\d{3}-?\d{4}\s*/, "").trim();
+  const m = t.match(/^(北海道|東京都|京都府|大阪府|.{2,3}?県)\s*(.*)$/);
+  if (!m) return {};
+  const pref = m[1], rest = m[2];
+  let city = "", ward = "";
+  if (pref === "東京都") {
+    const w = rest.match(/^([^市区]+区)/);
+    if (w) ward = w[1]; else { const c = rest.match(/^(.+?市)/); if (c) city = c[1]; }
+  } else {
+    const c = rest.match(/^(.+?市|.+?郡[^市区町村]+[町村]|[^市区]+?[町村])/);
+    if (c) city = c[1];
+    const w = rest.slice(city.length).match(/^([^市区]+区)/);
+    if (w) ward = w[1];
+  }
+  return { prefecture: pref, city, ward };
+}
+/* 店舗名に住所などが続いていたら、店舗名の部分だけにする */
+function cleanName(name) {
+  let n = String(name || "").split(/\r?\n/)[0].trim();
+  const i = n.search(/〒|\d{3}-\d{4}|(北海道|東京都|京都府|大阪府|[^\s、,]{2,3}県)[^\s]*?[市区町村郡]/);
+  if (i > 0) n = n.slice(0, i);
+  return n.replace(/[\s　、,・｜|]+$/, "").trim();
+}
+/* 県・市・区を別々に返す（保存されていなければ、地域や住所の文字から分ける） */
+function placeParts(v) {
+  let prefecture = textOf(v, "prefecture"), city = textOf(v, "city"), ward = textOf(v, "ward");
+  if (!prefecture && !city && !ward) {
+    const sp = splitPlace(textOf(v, "area") || textOf(v, "address"));
+    prefecture = sp.prefecture || ""; city = sp.city || ""; ward = sp.ward || "";
+  }
+  return { prefecture, city, ward };
+}
+const shopOf = (v) => cleanName(textOf(v, "shopName")) || textOf(v, "shopName") || "";
+const placeOf = (v) => { const p = placeParts(v); return [p.prefecture, p.city, p.ward].join("") || textOf(v, "area"); };
 const created = (v) => (v.createdAt?.toMillis ? v.createdAt.toMillis() : Date.now() + 1e12);
 const VISIT_SORTERS = {
   caseDesc: (a, b) => caseNum(b) - caseNum(a) || created(b) - created(a),
   caseAsc: (a, b) => (caseNum(a) || 1e9) - (caseNum(b) || 1e9) || created(a) - created(b),
   dateTime: (a, b) => (a.visitDate || "").localeCompare(b.visitDate || "") || timeOf(a).localeCompare(timeOf(b)) || caseNum(a) - caseNum(b),
   area: (a, b) => byEmptyLast(placeOf(a), placeOf(b), true) || caseNum(b) - caseNum(a),
-  shop: (a, b) => byEmptyLast(textOf(a, "shopName"), textOf(b, "shopName"), true) || caseNum(b) - caseNum(a)
+  shop: (a, b) => byEmptyLast(shopOf(a), shopOf(b), true) || caseNum(b) - caseNum(a),
+  manual: (a, b) => manualIdx(a) - manualIdx(b)
 };
+/* 手動の並び順：自分が並べた順。まだ並べていないものは案件番号の古い順で後ろに */
+const manualIdx = (v) => { const i = myOrder.indexOf(v.id); return i >= 0 ? i : 1e6 + caseNum(v); };
+async function moveVisit(id, dir) {
+  const ids = filteredVisits().map((v) => v.id);
+  const i = ids.indexOf(id), j = i + dir;
+  if (i < 0 || j < 0 || j >= ids.length) return;
+  [ids[i], ids[j]] = [ids[j], ids[i]];
+  myOrder = [...ids, ...myOrder.filter((x) => !ids.includes(x))].slice(0, 1500);
+  renderVisitList();
+  try { await setDoc(doc(db, "users", currentUser.uid), { visitOrder: myOrder }, { merge: true }); }
+  catch (err) { showBanner(err, "並び順の保存"); }
+}
 
 /* ---- 担当者で絞り込み・キーワード検索・担当者別の件数 ---- */
 const personOf = (v) => textOf(v, "personName") || (v.items || []).find((i) => /担当/.test(i.label || "") && i.value)?.value || "";
@@ -1300,7 +1367,7 @@ function isMine(v) {
 }
 function refreshPersonOptions() {
   const sel = $("#visitPerson");
-  const cur = sel.value || "__me";
+  const cur = sel.value ?? "__me"; // 「全員」（空文字）も、そのまま保つ
   const names = [...new Set(visits.map(personOf).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja"));
   const hasNone = visits.some((v) => !personOf(v));
   sel.innerHTML = `<option value="__me">自分${myName ? `（${esc(myName)}）` : ""}</option><option value="">全員</option>` +
@@ -1344,19 +1411,21 @@ function renderPersonCounts() {
   box.innerHTML = `<div class="pc-title">👥 担当者別の件数${f ? "" : "（日付ごと・直近7日分）"}</div>` + dates.map((d) => {
     const counts = {};
     base.filter((v) => (v.visitDate || "") === d).forEach((v) => { const n = personOf(v) || "担当者なし"; counts[n] = (counts[n] || 0) + 1; });
-    const chips = Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ja")).map(([n, c]) => {
+    const total0 = Object.values(counts).reduce((a, b) => a + b, 0);
+    const allChip = `<button type="button" class="pc-chip${cur === "" ? " active" : ""}" data-person="">全員 <b>${total0}件</b></button>`;
+    const chips = allChip + Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ja")).map(([n, c]) => {
       const val = n === "担当者なし" ? NO_PERSON : (n === myName ? "__me" : n);
       return `<button type="button" class="pc-chip${cur === val ? " active" : ""}" data-person="${esc(val)}">${esc(n)}${n === myName ? "（自分）" : ""} <b>${c}件</b></button>`;
     }).join("");
     const total = Object.values(counts).reduce((a, b) => a + b, 0);
-    return `<div class="pc-row"><span class="pc-date">${esc(fmtDateJa(d))}　計${total}件</span>${chips}</div>`;
+    return `<div class="pc-row"><span class="pc-date">${esc(fmtDateJa(d))}</span>${chips}</div>`;
   }).join("");
 }
 $("#personCounts").addEventListener("click", (e) => {
   const chip = e.target.closest("[data-person]");
   if (!chip) return;
   const sel = $("#visitPerson");
-  sel.value = sel.value === chip.dataset.person ? "" : chip.dataset.person; // もう一度押すと全員に戻る
+  sel.value = sel.value === chip.dataset.person ? "" : chip.dataset.person; // もう一度押すと絞り込みが消えて全員に戻る
   renderVisitList();
 });
 
@@ -1371,6 +1440,34 @@ function updateCaseNoList() {
       return `<option value="${esc(v.caseNo)}">${esc(`${shop}（${v.visitDate || ""}）`)}</option>`;
     }).join("");
 }
+
+/* 訪問予定時刻：カードの上で「◯時」を選ぶだけ（自分が登録したもの／管理者のみ変更可） */
+const TIME_HOURS = Array.from({ length: 18 }, (_, i) => i + 6); // 6時〜23時
+function timeSelectHtml(v, time) {
+  const h = /^\d{1,2}:/.test(time) ? parseInt(time, 10) : null;
+  if (!canModify(v)) return h !== null ? `🕒 ${h}時` : "";
+  return `<label class="vtime">🕒 <select data-vtime="${esc(v.id)}" aria-label="訪問予定時刻">
+    <option value="">時間未定</option>${TIME_HOURS.map((x) => `<option value="${pad(x)}:00"${x === h ? " selected" : ""}>${x}時</option>`).join("")}
+  </select></label>`;
+}
+$("#visitList").addEventListener("change", async (e) => {
+  const sel = e.target.closest("select[data-vtime]");
+  if (!sel) return;
+  const v = visits.find((x) => x.id === sel.dataset.vtime);
+  if (!v || !canModify(v)) return;
+  const items = clone(v.items || []);
+  const t = items.find((i) => i.type === "time");
+  if (t) t.value = sel.value;
+  else items.push({ id: "visitTime", label: "訪問予定時刻", type: "time", value: sel.value });
+  try {
+    await updateDoc(doc(db, "visits", v.id), { items, updatedAt: serverTimestamp(), updatedBy: currentUser.email });
+    toast(sel.value ? `${parseInt(sel.value, 10)}時に変更しました` : "時間を未定にしました");
+  } catch (err) { showBanner(err, "訪問予定時刻の変更"); renderVisitList(); }
+});
+$("#visitList").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-vmove]");
+  if (b) moveVisit(b.dataset.id, Number(b.dataset.vmove));
+});
 
 function renderVisitList() {
   if (!currentUser) return;
@@ -1400,17 +1497,23 @@ function renderVisitList() {
     let titleIdx = items.findIndex((i) => i.id === "shopName" && i.value);
     if (titleIdx < 0) titleIdx = items.findIndex((i) => i.value && i.type === "text");
     const title = titleIdx >= 0 ? items[titleIdx].value : "（店舗名なし）";
-    const subIds = ["area", "prefecture", "city", "ward", "category"];
-    const time = items.find((i) => i.type === "time" && i.value)?.value;
-    const sub = [
-      !grouped && v.visitDate && `📅 ${fmtDateJa(v.visitDate)}${time ? ` ${fmtHour(time)}` : ""}`,
-      grouped && time && `🕒 ${fmtHour(time)}`,
-      placeOf(v) && `📍 ${placeOf(v)}`,
-      textOf(v, "category") && `🏷 ${textOf(v, "category")}`
-    ].filter(Boolean).map(esc);
+    const subIds = ["area", "prefecture", "city", "ward", "category", "hours"];
+    const time = items.find((i) => i.type === "time" && i.value)?.value || "";
+    const pp = placeParts(v);
+    const cat = textOf(v, "category");
+    const hoursTxt = textOf(v, "hours");
+    const when = [
+      !grouped && v.visitDate ? `📅 ${esc(fmtDateJa(v.visitDate))}` : "",
+      timeSelectHtml(v, time)
+    ].filter(Boolean).join(" ");
+    const tags = [["都道府県", pp.prefecture], ["市", pp.city], ["区", pp.ward], ["業種", cat]]
+      .filter(([, val]) => val)
+      .map(([k, val]) => `<span class="tag" title="${k}">${esc(val)}</span>`).join("");
+    const hoursHtml = hoursTxt ? `<p class="visit-hours">🕒 営業時間：${esc(hoursTxt.split("\n")[0])}${hoursTxt.includes("\n") ? ` <small>ほか（下の「店舗の詳細」に全部あります）</small>` : ""}</p>` : "";
+    const moveBtns = sort === "manual" ? `<span class="move-btns"><button class="btn small" type="button" data-vmove="-1" data-id="${esc(v.id)}" title="上へ">↑</button><button class="btn small" type="button" data-vmove="1" data-id="${esc(v.id)}" title="下へ">↓</button></span>` : "";
     const rest = items.filter((i, k) => k !== titleIdx && !subIds.includes(i.id) && i.type !== "time");
     const main = rest.filter((i) => ["personName", "phone", "maps", "memo"].includes(i.id) || i.type === "maps");
-    const more = rest.filter((i) => !main.includes(i));
+    const more = [...items.filter((i) => i.id === "hours" && i.value), ...rest.filter((i) => !main.includes(i))];
     const actions = canModify(v) ? `
       <span class="btn-row" style="margin:0">
         <button class="btn small" type="button" data-vedit="${esc(v.id)}">編集</button>
@@ -1420,8 +1523,10 @@ function renderVisitList() {
         <button class="btn small" type="button" data-copy="${esc(v.caseNo)}">番号をコピー</button>` : "";
     const st = visitStatus(v);
     html += `<div class="visit-item${st.done ? " is-done" : ""}">
-      <div class="report-head"><p class="report-title">${esc(title)}</p><span class="btn-row" style="margin:0;align-items:center">${caseTag}</span></div>
-      ${sub.length ? `<p class="visit-sub">${sub.join('<span class="sep"> · </span>')}</p>` : ""}
+      <div class="report-head"><p class="report-title">${esc(cleanName(title) || title)}</p><span class="btn-row" style="margin:0;align-items:center">${caseTag}</span></div>
+      <p class="visit-sub">${when}${moveBtns}</p>
+      ${tags ? `<div class="tags">${tags}</div>` : ""}
+      ${hoursHtml}
       <div class="btn-row visit-status">${st.html}
         ${st.done ? "" : `<button class="btn small primary" type="button" data-report-visit="${esc(v.id)}">この訪問を報告する</button>`}
         ${v.demoUrl ? `<a class="btn small" href="${esc(v.demoUrl)}" target="_blank" rel="noopener">デモサイトを開く</a><button class="btn small" type="button" data-copy="${esc(v.demoUrl)}">デモURLをコピー</button>` : ""}
@@ -1680,6 +1785,9 @@ $("#tab-admin").addEventListener("click", async (e) => {
 });
 
 /* ---------- 訪問と報告をつなげる ---------- */
+const visitOfReport = (r) => { const k = norm(caseNoOfReport(r)); return k ? visits.find((x) => norm(x.caseNo) === k) : null; };
+/* 報告一覧の「案件名」は店舗名 */
+const reportTitle = (r) => { const v = visitOfReport(r); return (v && shopOf(v)) || itemVal(r.items, "caseName") || itemVal(r.items, "visitTo") || "（店舗名なし）"; };
 const caseNoOfReport = (r) => (r.items || []).find((i) => i.type === "caseNo" && i.value)?.value || "";
 function reportsOfCase(no) {
   const k = norm(no);
@@ -1713,7 +1821,7 @@ document.addEventListener("click", (e) => {
 
 /* ---------- 今日 ---------- */
 function mapsDirUrl(list) {
-  const dest = (v) => textOf(v, "address") || [textOf(v, "shopName"), placeOf(v)].filter(Boolean).join(" ");
+  const dest = (v) => textOf(v, "address") || [shopOf(v), placeOf(v)].filter(Boolean).join(" ");
   const stops = list.map(dest).filter(Boolean);
   if (!stops.length) return "";
   const u = new URL("https://www.google.com/maps/dir/");
@@ -1728,7 +1836,7 @@ function visitMiniHtml(v, opts = {}) {
   const time = (v.items || []).find((i) => i.type === "time" && i.value)?.value;
   return `<div class="mini-row">
     <div class="mini-main">
-      <div class="mini-title">${time ? `<b>${esc(fmtHour(time))}</b> ` : ""}${v.caseNo ? `<span class="case-no">${esc(v.caseNo)}</span> ` : ""}${esc(textOf(v, "shopName") || "（店舗名なし）")}</div>
+      <div class="mini-title">${time ? `<b>${esc(fmtHour(time))}</b> ` : ""}${v.caseNo ? `<span class="case-no">${esc(v.caseNo)}</span> ` : ""}${esc(shopOf(v) || "（店舗名なし）")}</div>
       <div class="mini-sub">${[opts.showDate && fmtDateJa(v.visitDate), placeOf(v), textOf(v, "category")].filter(Boolean).map(esc).join(" · ")}</div>
     </div>
     <div class="btn-row" style="margin:0">${st.html}
@@ -1737,18 +1845,28 @@ function visitMiniHtml(v, opts = {}) {
     </div>
   </div>`;
 }
+let todayOffset = 0; // 0=今日 1=明日
+$("#todaySeg").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-day]");
+  if (!b) return;
+  todayOffset = Number(b.dataset.day);
+  renderToday();
+});
 function renderToday() {
   if (!currentUser || !$("#todayVisits")) return;
   const t = today();
-  $("#todayTitle").textContent = `今日の予定（${fmtDateJa(t)}）`;
-  const mine = visits.filter((v) => v.visitDate === t && isMine(v))
+  const day = todayOffset ? tomorrow() : t;
+  const dayWord = todayOffset ? "明日" : "今日";
+  document.querySelectorAll("#todaySeg .seg-btn").forEach((b) => b.classList.toggle("active", Number(b.dataset.day) === todayOffset));
+  $("#todayTitle").textContent = `${dayWord}の予定（${fmtDateJa(day)}）`;
+  const mine = visits.filter((v) => v.visitDate === day && isMine(v))
     .sort((a, b) => timeOf(a).localeCompare(timeOf(b)) || caseNum(a) - caseNum(b));
   const route = mapsDirUrl(mine);
   $("#todayVisits").innerHTML = mine.length
     ? `<p class="hint">自分の訪問 ${mine.length}件（報告済み ${mine.filter((v) => visitStatus(v).done).length}件）</p>` +
       mine.map((v) => visitMiniHtml(v)).join("") +
-      (route ? `<div class="btn-row"><a class="btn" href="${esc(route)}" target="_blank" rel="noopener">🗺 今日のルートをGoogleマップで開く</a></div>` : "")
-    : `<p class="empty">今日の訪問予定はありません${myName ? "" : "<br><small>右上の「👤 名前」で自分の名前を固定すると、自分の予定が表示されます</small>"}</p>`;
+      (route ? `<div class="btn-row"><a class="btn" href="${esc(route)}" target="_blank" rel="noopener">🗺 ${dayWord}のルートをGoogleマップで開く</a></div>` : "")
+    : `<p class="empty">${dayWord}の訪問予定はありません${myName ? "" : "<br><small>右上の「👤 名前」で自分の名前を固定すると、自分の予定が表示されます</small>"}</p>`;
 
   // 次回アクション：自分の報告で、予定日が今日まで・未対応のもの
   const acts = reports.filter((r) => isMyReport(r) && !r.naDone).map((r) => {
@@ -1759,7 +1877,7 @@ function renderToday() {
   $("#todayActions").innerHTML = acts.length ? acts.map((x) => `
     <div class="mini-row">
       <div class="mini-main">
-        <div class="mini-title">${x.d < t ? '<span class="due over">期限切れ</span>' : '<span class="due now">今日</span>'} ${esc(itemVal(x.r.items, "caseName") || itemVal(x.r.items, "visitTo") || "（案件名なし）")}</div>
+        <div class="mini-title">${x.d < t ? '<span class="due over">期限切れ</span>' : '<span class="due now">今日</span>'} ${esc(reportTitle(x.r))}</div>
         <div class="mini-sub">${esc(fmtDateJa(x.d))}${x.text ? ` · ${esc(x.text)}` : ""}</div>
       </div>
       <div class="btn-row" style="margin:0">
@@ -1947,17 +2065,67 @@ $("#exportVisits").addEventListener("click", () => {
   downloadCsv(`訪問リスト_${today()}.csv`, rows);
 });
 
-/* ---------- 集計（管理者） ---------- */
+/* ---------- 集計（管理者のみ） ---------- */
 const monthOf = (s) => (s || "").slice(0, 7);
 const reportDay = (r) => (r.createdAt?.toDate ? ymd(r.createdAt.toDate()) : today());
-function refreshStatsPeriods() {
-  const sel = $("#statsPeriod");
-  const cur = sel.value || monthOf(today());
-  const months = [...new Set([monthOf(today()), ...visits.map((v) => monthOf(v.visitDate)), ...reports.map((r) => monthOf(reportDay(r)))].filter(Boolean))].sort().reverse();
-  sel.innerHTML = `<option value="all">全期間</option>` + months.map((m) => `<option value="${m}">${m.replace("-", "年")}月</option>`).join("");
-  sel.value = [...sel.options].some((o) => o.value === cur) ? cur : "all";
+const addDays = (d, n) => { const x = new Date(`${d}T00:00:00`); x.setDate(x.getDate() + n); return ymd(x); };
+const weekStart = (d) => { const x = new Date(`${d}T00:00:00`); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return ymd(x); }; // 月曜はじまり
+const lastOfMonth = (m) => { const [y, mo] = m.split("-").map(Number); return ymd(new Date(y, mo, 0)); };
+let statsAnchor = null; // 見ている日（単位に合わせて週・月・年に直す）
+const anchor = () => statsAnchor || today();
+
+/* いまの単位と日付から 期間 {from, to, text} を作る */
+function statsRange() {
+  const unit = $("#statsUnit").value;
+  const d = anchor();
+  if (unit === "day") return { unit, from: d, to: d, text: fmtDateJa(d) };
+  if (unit === "week") { const f = weekStart(d), t = addDays(f, 6); return { unit, from: f, to: t, text: `${fmtDateJa(f)} 〜 ${fmtDateJa(t)}` }; }
+  if (unit === "month") { const m = monthOf(d); return { unit, from: `${m}-01`, to: lastOfMonth(m), text: `${m.replace("-", "年")}月` }; }
+  if (unit === "year") { const y = d.slice(0, 4); return { unit, from: `${y}-01-01`, to: `${y}-12-31`, text: `${y}年` }; }
+  if (unit === "custom") {
+    let f = $("#statsFrom").value || addDays(today(), -6), t = $("#statsTo").value || today();
+    if (f > t) [f, t] = [t, f];
+    return { unit, from: f, to: t, text: `${fmtDateJa(f)} 〜 ${fmtDateJa(t)}` };
+  }
+  return { unit: "all", from: "0000-00-00", to: "9999-99-99", text: "全期間" };
 }
-$("#statsPeriod").addEventListener("change", renderStats);
+function syncStatsInputs() {
+  const unit = $("#statsUnit").value;
+  const d = anchor();
+  const show = (sel, on) => $(sel).classList.toggle("hidden", !on);
+  show("#statsDay", unit === "day"); show("#statsMonthIn", unit === "month"); show("#statsYear", unit === "year");
+  show("#statsFrom", unit === "custom"); show("#statsTo", unit === "custom"); show("#statsTilde", unit === "custom");
+  show("#statsPrev", ["day", "week", "month", "year"].includes(unit)); show("#statsNext", ["day", "week", "month", "year"].includes(unit));
+  show("#statsNow", unit !== "all" && unit !== "custom");
+  $("#statsRangeText").classList.toggle("hidden", !["week", "all"].includes(unit));
+  if (unit === "day") $("#statsDay").value = d;
+  if (unit === "month") $("#statsMonthIn").value = monthOf(d);
+  if (unit === "year") {
+    const thisY = Number(today().slice(0, 4));
+    const years = new Set([thisY, Number(d.slice(0, 4)), ...visits.map((v) => Number((v.visitDate || "").slice(0, 4))), ...reports.map((r) => Number(reportDay(r).slice(0, 4)))].filter(Boolean));
+    $("#statsYear").innerHTML = [...years].sort((x, y) => y - x).map((y) => `<option value="${y}">${y}年</option>`).join("");
+    $("#statsYear").value = d.slice(0, 4);
+  }
+  if (unit === "custom" && !$("#statsFrom").value) { $("#statsFrom").value = addDays(today(), -6); $("#statsTo").value = today(); }
+}
+function stepStats(n) {
+  const unit = $("#statsUnit").value, d = anchor();
+  if (unit === "day") statsAnchor = addDays(d, n);
+  else if (unit === "week") statsAnchor = addDays(d, 7 * n);
+  else if (unit === "month") { const x = new Date(`${d.slice(0, 7)}-01T00:00:00`); x.setMonth(x.getMonth() + n); statsAnchor = ymd(x); }
+  else if (unit === "year") statsAnchor = `${Number(d.slice(0, 4)) + n}-01-01`;
+  renderStats();
+}
+$("#statsUnit").addEventListener("change", renderStats);
+$("#statsPrev").addEventListener("click", () => stepStats(-1));
+$("#statsNext").addEventListener("click", () => stepStats(1));
+$("#statsNow").addEventListener("click", () => { statsAnchor = null; renderStats(); });
+$("#statsDay").addEventListener("change", (e) => { if (e.target.value) { statsAnchor = e.target.value; renderStats(); } });
+$("#statsMonthIn").addEventListener("change", (e) => { if (e.target.value) { statsAnchor = `${e.target.value}-01`; renderStats(); } });
+$("#statsYear").addEventListener("change", (e) => { statsAnchor = `${e.target.value}-01-01`; renderStats(); });
+$("#statsFrom").addEventListener("change", renderStats);
+$("#statsTo").addEventListener("change", renderStats);
+
 function statTable(rows, keyLabel) {
   if (!rows.length) return `<p class="empty">データがありません</p>`;
   const maxV = Math.max(1, ...rows.map((r) => r.visits));
@@ -1967,11 +2135,44 @@ function statTable(rows, keyLabel) {
       <span>${r.reports}</span><span class="st-won">${r.won}</span>
       <span>${r.reports ? Math.round((r.won / r.reports) * 100) : 0}%</span></div>`).join("") + "</div>";
 }
+const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+
+/* 数字の日報：件数だけを並べる（結果ごとの件数・成約率・次回アクション） */
+function dailyNumbers(from, to, vs, rs) {
+  const results = [...new Set([...(formats.report.find((f) => f.id === "result")?.options || []), ...rs.map((r) => itemVal(r.items, "result")).filter(Boolean)])];
+  const cnt = (list) => Object.fromEntries(results.map((k) => [k, list.filter((r) => itemVal(r.items, "result") === k).length]));
+  return { results, cnt };
+}
+function dailyText(range, vs, rs) {
+  const { results, cnt } = dailyNumbers(range.from, range.to, vs, rs);
+  const c = cnt(rs);
+  const won = c["成約"] || 0;
+  const pending = rs.filter((r) => !r.naDone && firstOfType(naItemsOf(r), ["date", "datetime"])).length;
+  const people = {};
+  const P = (n) => (people[n || "（担当者なし）"] ||= { v: 0, r: 0, w: 0 });
+  vs.forEach((v) => P(personOf(v)).v++);
+  rs.forEach((r) => { const x = P(reportPerson(r)); x.r++; if (itemVal(r.items, "result") === "成約") x.w++; });
+  return [
+    `【日報】${range.text}`,
+    `訪問予定：${vs.length}件`,
+    `完了報告：${rs.length}件`,
+    `成約：${won}件（成約率 ${pct(won, rs.length)}%）`,
+    results.filter((k) => k !== "成約").map((k) => `${k}：${c[k] || 0}件`).join("　"),
+    `報告漏れ（訪問−報告）：${Math.max(0, vs.length - rs.length)}件`,
+    `次回アクション（未対応）：${pending}件`,
+    "",
+    "■担当者別（訪問／報告／成約）",
+    ...Object.entries(people).sort((a, b) => b[1].w - a[1].w || b[1].r - a[1].r).map(([n, x]) => `${n}：${x.v}／${x.r}／${x.w}`)
+  ].filter((l, i, arr) => !(l === "" && i === 4)).join("\n");
+}
+let lastDaily = "";
+
 function renderStats() {
   if (!isAdmin() || !$("#statsPerson")) return;
-  refreshStatsPeriods();
-  const p = $("#statsPeriod").value;
-  const inP = (d) => p === "all" || monthOf(d) === p;
+  syncStatsInputs();
+  const range = statsRange();
+  $("#statsRangeText").textContent = range.text;
+  const inP = (d) => !!d && d >= range.from && d <= range.to;
   const vs = visits.filter((v) => inP(v.visitDate));
   const rs = reports.filter((r) => inP(reportDay(r)));
   const won = (r) => itemVal(r.items, "result") === "成約";
@@ -1983,18 +2184,79 @@ function renderStats() {
     return Object.values(m).sort((a, b) => b.won - a.won || b.reports - a.reports || b.visits - a.visits);
   };
   const totalWon = rs.filter(won).length;
-  $("#statsSummary").innerHTML = `<div><b>${vs.length}</b><small>訪問</small></div><div><b>${rs.length}</b><small>報告</small></div><div class="st-won"><b>${totalWon}</b><small>成約</small></div><div><b>${rs.length ? Math.round((totalWon / rs.length) * 100) : 0}%</b><small>成約率</small></div>`;
+  $("#statsSummary").innerHTML = `<div><b>${vs.length}</b><small>訪問</small></div><div><b>${rs.length}</b><small>報告</small></div><div class="st-won"><b>${totalWon}</b><small>成約</small></div><div><b>${pct(totalWon, rs.length)}%</b><small>成約率</small></div>`;
+
+  // 日報（数字）：日ごとの件数表（最大31日）＋コピー用の文章
+  const { results, cnt } = dailyNumbers(range.from, range.to, vs, rs);
+  const days = [...new Set([...vs.map((v) => v.visitDate), ...rs.map(reportDay)].filter(Boolean))].sort().reverse().slice(0, 31);
+  $("#statsDaily").innerHTML = days.length ? `<div class="stat-table daily" style="--cols:${results.length + 2}">
+    <div class="st-head"><span>日付</span><span>訪問</span><span>報告</span>${results.map((k) => `<span>${esc(k)}</span>`).join("")}</div>` +
+    days.map((d) => {
+      const dv = vs.filter((v) => v.visitDate === d), dr = rs.filter((r) => reportDay(r) === d), c = cnt(dr);
+      return `<div class="st-row"><span class="st-key">${esc(fmtDateJa(d))}</span><span>${dv.length}</span><span>${dr.length}</span>${results.map((k) => `<span${k === "成約" ? ' class="st-won"' : ""}>${c[k] || 0}</span>`).join("")}</div>`;
+    }).join("") + "</div>" : `<p class="empty">この期間のデータがありません</p>`;
+  lastDaily = dailyText(range, vs, rs);
+
   $("#statsPerson").innerHTML = statTable(group(personOf, reportPerson), "担当者");
   const reportPlace = (r) => {
-    const v = visits.find((x) => x.caseNo && norm(x.caseNo) === norm(caseNoOfReport(r)));
-    return v ? [textOf(v, "prefecture"), textOf(v, "city") || textOf(v, "ward")].join("") || placeOf(v) : "";
+    const v = visitOfReport(r);
+    if (!v) return "";
+    const p = placeParts(v);
+    return [p.prefecture, p.city || p.ward].join("");
   };
-  $("#statsArea").innerHTML = statTable(group((v) => [textOf(v, "prefecture"), textOf(v, "city") || textOf(v, "ward")].join("") || placeOf(v), reportPlace), "地域");
-  const months = {};
-  visits.forEach((v) => { const k = monthOf(v.visitDate); if (k) (months[k] ||= { key: k, visits: 0, reports: 0, won: 0 }).visits++; });
-  reports.forEach((r) => { const k = monthOf(reportDay(r)); const x = (months[k] ||= { key: k, visits: 0, reports: 0, won: 0 }); x.reports++; if (won(r)) x.won++; });
-  $("#statsMonth").innerHTML = statTable(Object.values(months).sort((a, b) => b.key.localeCompare(a.key)).slice(0, 12).map((x) => ({ ...x, key: x.key.replace("-", "年") + "月" })), "月");
+  $("#statsArea").innerHTML = statTable(group((v) => { const p = placeParts(v); return [p.prefecture, p.city || p.ward].join(""); }, reportPlace), "地域");
+
+  // 推移：期間の大きさに合わせて 日別／月別／年別
+  const spanDays = range.unit === "all" ? 9999 : Math.round((new Date(range.to) - new Date(range.from)) / 864e5) + 1;
+  const bucket = spanDays <= 62 ? [(d) => d, (k) => fmtDateJa(k), "日別"] : spanDays <= 800 ? [monthOf, (k) => k.replace("-", "年") + "月", "月別"] : [(d) => d.slice(0, 4), (k) => k + "年", "年別"];
+  $("#statsTrendTitle").textContent = `${bucket[2]}の推移`;
+  const tr = {};
+  const T = (k) => (tr[k] ||= { key: k, visits: 0, reports: 0, won: 0 });
+  vs.forEach((v) => { const k = bucket[0](v.visitDate); if (k) T(k).visits++; });
+  rs.forEach((r) => { const k = bucket[0](reportDay(r)); if (k) { const x = T(k); x.reports++; if (won(r)) x.won++; } });
+  $("#statsMonth").innerHTML = statTable(Object.values(tr).sort((a, b) => b.key.localeCompare(a.key)).slice(0, 62).map((x) => ({ ...x, key: bucket[1](x.key) })), bucket[2].replace("別", ""));
 }
+$("#copyDaily").addEventListener("click", () => { if (lastDaily) copyText(lastDaily); });
+
+/* ---------- 訪問先の読み取り直し（管理者） ---------- */
+const visitNeedsRepair = (v) => {
+  const sn = textOf(v, "shopName");
+  const hasMaps = (v.items || []).some((i) => i.type === "maps" && i.value);
+  if (!hasMaps) return false;
+  return /[\n〒]/.test(sn) || sn.length > 40 || !textOf(v, "prefecture");
+};
+$("#repairVisits").addEventListener("click", async () => {
+  if (!isAdmin()) return;
+  const targets = visits.filter(visitNeedsRepair);
+  const out = $("#repairResult");
+  if (!targets.length) { out.textContent = "読み取り直しが必要な訪問先はありません。"; return; }
+  if (!confirm(`${targets.length}件の訪問先を、Googleマップから読み取り直します。店舗名・県・市・区・業種・営業時間が上書きされます。よろしいですか？`)) return;
+  const btn = $("#repairVisits");
+  btn.disabled = true;
+  let ok = 0, ng = 0;
+  for (const [n, v] of targets.entries()) {
+    out.textContent = `読み取り中… ${n + 1} / ${targets.length}`;
+    try {
+      const url = (v.items.find((i) => i.type === "maps" && i.value) || {}).value;
+      lookupCache.delete(url);
+      const info = await mapsLookup(url);
+      if (!info.ok) { ng++; continue; }
+      const items = clone(v.items);
+      // フォーマットの項目ごとに、マップの情報を入れる（無い項目は足す）
+      formats.visit.filter((f) => f.type !== "maps").forEach((f) => {
+        const key = LOOKUP_MAP[f.id] || autoKeyByLabel(f.label, f.type);
+        if (!key || !info[key]) return;
+        let it = items.find((i) => i.id === f.id);
+        if (!it) { it = { id: f.id, label: f.label, type: f.type, value: "" }; items.push(it); }
+        it.value = info[key];
+      });
+      await updateDoc(doc(db, "visits", v.id), { items, updatedAt: serverTimestamp(), updatedBy: currentUser.email });
+      ok++;
+    } catch { ng++; }
+  }
+  btn.disabled = false;
+  out.textContent = `完了：${ok}件を直しました${ng ? `（${ng}件は読み取れませんでした。カードの「編集」から手で直してください）` : ""}。`;
+});
 
 /* ---------- Claude Code：まとめて依頼 ---------- */
 $("#copyClaudeBatch").addEventListener("click", () => {
