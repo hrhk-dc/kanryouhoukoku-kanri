@@ -1,7 +1,7 @@
 // DC 完了報告：ホーム画面アプリ用のサービスワーカー
 // 画面のファイルは「ネット優先・つながらない時だけ保存版」を使う（更新がすぐ反映されるように）
 // 報告データ（Firebase）は保存しない
-const CACHE = "dc-report-v22";
+const CACHE = "dc-report-v23";
 const SHELL = [
   "/", "/index.html", "/style.css", "/app.js", "/firebase-config.js",
   "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/icon.svg", "/icons/apple-touch-icon.png"
@@ -24,7 +24,7 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // Firebaseなど外部への通信は触らない
-  if (url.pathname.startsWith("/api/")) return;    // マップ読み取りなどのAPIは保存しない
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/__/")) return; // API・ログイン用ページは触らない    // マップ読み取りなどのAPIは保存しない
 
   e.respondWith(
     fetch(req)

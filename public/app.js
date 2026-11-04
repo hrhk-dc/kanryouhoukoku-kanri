@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  signInWithPopup, GoogleAuthProvider, signOut, sendEmailVerification, sendPasswordResetEmail
+  signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, sendEmailVerification, sendPasswordResetEmail
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, setDoc, collection, addDoc, updateDoc, deleteDoc,
@@ -349,9 +349,23 @@ $("#authForm").addEventListener("submit", async (e) => {
 
 $("#googleBtn").addEventListener("click", async () => {
   clearError($("#authError"));
-  try { await signInWithPopup(auth, new GoogleAuthProvider()); }
-  catch (err) { showError($("#authError"), err, "Googleログイン"); }
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: "select_account" });
+  const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+  try {
+    // スマホはポップアップが使えないことが多いので、画面を切り替える方式（リダイレクト）で
+    if (mobile) { await signInWithRedirect(auth, provider); return; }
+    await signInWithPopup(auth, provider);
+  } catch (err) {
+    // パソコンでもポップアップが止められたら、リダイレクト方式に切り替える
+    if (!mobile && ["auth/popup-blocked", "auth/operation-not-supported-in-environment"].includes(err.code)) {
+      try { await signInWithRedirect(auth, provider); return; } catch (e2) { err = e2; }
+    }
+    showError($("#authError"), err, "Googleログイン");
+  }
 });
+// リダイレクトで戻ってきたときの結果（エラーがあれば表示）
+getRedirectResult(auth).catch((err) => showError($("#authError"), err, "Googleログイン"));
 
 $("#resetBtn").addEventListener("click", async () => {
   const email = $("#authEmail").value.trim();
