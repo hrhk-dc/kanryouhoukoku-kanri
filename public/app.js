@@ -1191,7 +1191,7 @@ async function lookupRow(row, overwrite = false) {
     const info = await mapsLookup(url);
     if (!info.ok) { setRowStatus(row, `読み取れませんでした：${info.error || "不明な理由"}（手入力してください）`, "ng"); return info; }
     const n = applyLookup(row, info, overwrite);
-    const what = [info.name, info.area].filter(Boolean).join("・");
+    const what = [info.name, info.area, info.category && `業種：${info.category}${info.categorySource ? `（${info.categorySource}）` : ""}`].filter(Boolean).join("・");
     const note = (info.notes || []).join(" / ");
     const dup = duplicateNote(row, info);
     setRowStatus(row, `✓ ${what || "読み取りました"}${n ? `（${n}項目を入力）` : "（空欄はありませんでした）"}${note ? `　※${note}` : ""}${dup ? `\n${dup}` : ""}`, dup ? "ok dup" : "ok");

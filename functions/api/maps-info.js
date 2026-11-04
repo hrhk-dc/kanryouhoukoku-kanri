@@ -129,6 +129,20 @@ async function gsiAddress(lat, lng) {
   return { prefecture: m.pref || "", city: m.city || "", ward: m.ward || "", town: res.lv01Nm && res.lv01Nm !== "－" ? res.lv01Nm : "" };
 }
 
+// お店のホームページの題名・説明文を読んで、業種のヒントにする（3秒で諦める）
+async function siteText(url) {
+  try {
+    const r = await fetch(url, { redirect: "follow", headers: { "User-Agent": UA, "Accept-Language": "ja,en;q=0.5" }, signal: AbortSignal.timeout(3000) });
+    if (!r.ok) return "";
+    const html = (await r.text()).slice(0, 200000);
+    const pick = (re) => (html.match(re) || [])[1] || "";
+    return [pick(/<title[^>]*>([^<]{0,200})/i), pick(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']{0,300})/i), pick(/<meta[^>]+property=["']og:(?:title|description)["'][^>]+content=["']([^"']{0,300})/i), pick(/<meta[^>]+name=["']keywords["'][^>]+content=["']([^"']{0,300})/i)].join(" ");
+  } catch { return ""; }
+}
+// Googleの業種名のうち、何も分からない汎用の語は除く
+const GENERIC = new Set(["point_of_interest", "establishment", "store", "service", "health", "finance", "general_contractor_", "premise", "political", "locality", "food_store"]);
+const usefulRaw = (raw) => String(raw || "").split(/\s+/).filter((w) => w && !GENERIC.has(w)).join(" ");
+
 async function placesLookup(key, name, lat, lng) {
   const body = { textQuery: name, languageCode: "ja", regionCode: "JP" };
   if (lat && lng) body.locationBias = { circle: { center: { latitude: lat, longitude: lng }, radius: 300 } };
@@ -140,7 +154,7 @@ async function placesLookup(key, name, lat, lng) {
       "X-Goog-FieldMask": [
         "places.displayName", "places.formattedAddress", "places.nationalPhoneNumber",
         "places.regularOpeningHours.weekdayDescriptions", "places.primaryTypeDisplayName", "places.primaryType", "places.types",
-        "places.rating", "places.userRatingCount", "places.websiteUri", "places.location", "places.addressComponents"
+        "places.rating", "places.userRatingCount", "places.websiteUri", "places.location", "places.addressComponents", "places.editorialSummary"
       ].join(",")
     },
     body: JSON.stringify(body)
@@ -177,6 +191,7 @@ async function placesLookup(key, name, lat, lng) {
     category: [p.primaryTypeDisplayName?.text, p.primaryType, ...(p.types || [])].filter(Boolean).join(" "),
     rating: p.rating ? `★${p.rating}（${p.userRatingCount || 0}件）` : "",
     website: p.websiteUri || "",
+    summary: p.editorialSummary?.text || "",
     lat: p.location?.latitude, lng: p.location?.longitude
   };
 }
@@ -214,6 +229,13 @@ async function handle(req, env) {
       try { Object.assign(info, await gsiAddress(info.lat, info.lng)); }
       catch (e) { notes.push("地域（県・市区）を取得できませんでした"); }
     }
+    // 店舗がGoogleで見つからなかったときは、「店舗名＋地域」で探し直す
+    if (key && info.name && !info.categoryFound && !info.phone && !info.hours && (info.prefecture || info.city || info.ward)) {
+      try {
+        const again = await placesLookup(key, `${info.name} ${[info.prefecture, info.city, info.ward].filter(Boolean).join("")}`, info.lat, info.lng);
+        Object.assign(info, Object.fromEntries(Object.entries(again).filter(([k, v]) => v && !/^lat$|^lng$/.test(k) && !info[k])));
+      } catch { /* 探し直しの失敗は無視 */ }
+    }
     // 県・市・区は別々の項目で返す。座標から取れなければ、Googleの住所の部品 → 住所の文字 の順で補う
     const fb = splitPlace(info.address);
     if (!info.prefecture) info.prefecture = info.pPrefecture || fb.prefecture || "";
@@ -230,8 +252,24 @@ async function handle(req, env) {
     }
     if (!info.prefecture && info.address) Object.assign(info, Object.fromEntries(Object.entries(splitPlace(info.address)).filter(([, v]) => v)));
     // 業種：Googleの業種名から「飲食店・美容院・アパレル・整体・整骨院・不動産・建築・土木・その他」に選別（情報がなければ空欄）
-    info.categoryRaw = info.category || "";
-    info.category = classifyIndustry(info.category, info.name);
+    // ① Googleの業種名 ② 店舗名 ③ Googleの紹介文 ④ お店のホームページ の順に、手がかりを探す
+    const raw = usefulRaw(info.category);
+    info.categoryRaw = raw;
+    let industry = classifyIndustry(raw, info.name);
+    let source = raw ? "Googleの業種名" : "";
+    if ((!industry || industry === "その他") && info.summary) {
+      const s = classifyIndustry("", info.summary);
+      if (s) { industry = s; source = "Googleの紹介文"; }
+    }
+    if ((!industry || industry === "その他") && info.website) {
+      const w = classifyIndustry("", await siteText(info.website));
+      if (w) { industry = w; source = "ホームページ"; }
+    }
+    if (industry && source === "" && info.name) source = "店舗名";
+    info.category = industry;
+    info.categorySource = industry ? source : "";
+    if (!industry) notes.push("業種の手がかりがGoogleマップに見つかりませんでした（手で選んでください）");
+    delete info.summary;
     info.area = [info.prefecture, info.city, info.ward].filter(Boolean).join("");
     if (!info.address && info.area) info.address = info.area + (info.town || "");
 
