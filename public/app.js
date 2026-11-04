@@ -2229,7 +2229,7 @@ const visitNeedsRepair = (v) => {
   const sn = textOf(v, "shopName");
   const hasMaps = (v.items || []).some((i) => i.type === "maps" && i.value);
   if (!hasMaps) return false;
-  return /[\n〒]/.test(sn) || sn.length > 40 || !textOf(v, "prefecture");
+  return /[\n〒]/.test(sn) || sn.length > 40 || !textOf(v, "prefecture") || !catOf(v);
 };
 $("#repairVisits").addEventListener("click", async () => {
   if (!isAdmin()) return;
