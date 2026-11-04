@@ -5,6 +5,8 @@
 //  4. Cloudflareの環境変数 GOOGLE_MAPS_API_KEY があれば、Google Places APIで
 //     住所・電話番号・営業時間・業種・評価・ホームページも取得
 
+import { classifyIndustry } from "../../public/industry.js";
+
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36";
 const ALLOWED = /^(maps\.app\.goo\.gl|goo\.gl|(www\.)?google\.[a-z.]+|maps\.google\.[a-z.]+)$/i;
 
@@ -127,7 +129,6 @@ async function gsiAddress(lat, lng) {
   return { prefecture: m.pref || "", city: m.city || "", ward: m.ward || "", town: res.lv01Nm && res.lv01Nm !== "－" ? res.lv01Nm : "" };
 }
 
-const TYPE_JA = { restaurant: "レストラン", cafe: "カフェ", bar: "バー", bakery: "ベーカリー", ramen_restaurant: "ラーメン店", japanese_restaurant: "和食店", sushi_restaurant: "寿司店", meal_takeaway: "テイクアウト", store: "店舗", clothing_store: "衣料品店", beauty_salon: "美容室", hair_care: "美容室", spa: "スパ", gym: "ジム", dentist: "歯科", doctor: "医院", pharmacy: "薬局", hotel: "ホテル", lodging: "宿泊施設", supermarket: "スーパー", convenience_store: "コンビニ", car_repair: "自動車整備", car_dealer: "自動車販売", real_estate_agency: "不動産", school: "学校", florist: "花屋", book_store: "書店", shopping_mall: "ショッピングモール", food: "飲食店" };
 async function placesLookup(key, name, lat, lng) {
   const body = { textQuery: name, languageCode: "ja", regionCode: "JP" };
   if (lat && lng) body.locationBias = { circle: { center: { latitude: lat, longitude: lng }, radius: 300 } };
@@ -173,7 +174,7 @@ async function placesLookup(key, name, lat, lng) {
     address: (p.formattedAddress || "").replace(/^日本、?\s*/, "").replace(/^〒\d{3}-\d{4}\s*/, ""),
     phone: p.nationalPhoneNumber || "",
     hours: (p.regularOpeningHours?.weekdayDescriptions || []).join("\n"),
-    category: p.primaryTypeDisplayName?.text || TYPE_JA[p.primaryType] || TYPE_JA[(p.types || []).find((t) => TYPE_JA[t])] || "",
+    category: [p.primaryTypeDisplayName?.text, p.primaryType, ...(p.types || [])].filter(Boolean).join(" "),
     rating: p.rating ? `★${p.rating}（${p.userRatingCount || 0}件）` : "",
     website: p.websiteUri || "",
     lat: p.location?.latitude, lng: p.location?.longitude
@@ -228,6 +229,9 @@ async function handle(req, env) {
       if (c.rest && !info.address) info.address = c.rest.replace(/^〒?\s*\d{3}-?\d{4}\s*/, "");
     }
     if (!info.prefecture && info.address) Object.assign(info, Object.fromEntries(Object.entries(splitPlace(info.address)).filter(([, v]) => v)));
+    // 業種：Googleの業種名から「飲食店・美容院・アパレル・整体・整骨院・不動産・建築・土木・その他」に選別（情報がなければ空欄）
+    info.categoryRaw = info.category || "";
+    info.category = classifyIndustry(info.category, info.name);
     info.area = [info.prefecture, info.city, info.ward].filter(Boolean).join("");
     if (!info.address && info.area) info.address = info.area + (info.town || "");
 

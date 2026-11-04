@@ -8,6 +8,7 @@ import {
   onSnapshot, query, orderBy, serverTimestamp, writeBatch, runTransaction, getDoc, arrayUnion, arrayRemove
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
+import { INDUSTRIES, classifyIndustry } from "./industry.js";
 
 /* ---------- 設定 ---------- */
 const ADMIN_EMAIL = "hrhk@dc-hm.com";
@@ -77,7 +78,7 @@ const FORMATS = {
       { id: "prefecture", label: "地域（都道府県）", type: "text", required: false, auto: true },
       { id: "city", label: "市（市町村）", type: "text", required: false, auto: true },
       { id: "ward", label: "区", type: "text", required: false, auto: true },
-      { id: "category", label: "業種", type: "text", required: false, auto: true },
+      { id: "category", label: "業種", type: "select", options: INDUSTRIES, required: false, auto: true },
       { id: "hours", label: "営業時間", type: "textarea", required: false, auto: true },
       { id: "address", label: "住所", type: "text", required: false, auto: true },
       { id: "phone", label: "電話番号", type: "tel", required: false, auto: true },
@@ -482,6 +483,10 @@ function addAutoVisitFields() {
 let reportPhotoAdded = false;
 let reportWealthAdded = false;
 function normalizeFormat(key) {
+  if (key === "visit") { // 業種は「飲食店・美容院…」から選ぶ形に
+    const c = formats.visit.find((f) => f.id === "category" || /^業種$/.test(f.label || ""));
+    if (c) { c.type = "select"; c.options = [...INDUSTRIES]; }
+  }
   if (key === "nextAction") formats.nextAction.forEach((f) => delete f.locked);
   if (key === "report" && !reportPhotoAdded && !formats.report.some((f) => f.type === "photo")) {
     formats.report.push({ id: "photos", label: "写真", type: "photo", required: false });
@@ -563,7 +568,9 @@ function fieldInput(f, value = "") {
   switch (f.type) {
     case "textarea": return `<textarea ${attrs} rows="3">${esc(value)}</textarea>`;
     case "select": {
-      const opts = (f.options || []).map((o) => `<option value="${esc(o)}"${o === value ? " selected" : ""}>${esc(o)}</option>`).join("");
+      const list = (f.options || []).slice();
+      if (value && !list.includes(value)) list.push(value); // 以前に入れた値も消えないように残す
+      const opts = list.map((o) => `<option value="${esc(o)}"${o === value ? " selected" : ""}>${esc(o)}</option>`).join("");
       return `<select ${attrs}><option value="">選択してください</option>${opts}</select>`;
     }
     case "url": return `<input type="url" ${attrs} placeholder="https://..." value="${esc(value)}">`;
@@ -1345,6 +1352,8 @@ function placeParts(v) {
 /* 業種：項目の名前が違っていても「業種・ジャンル・カテゴリ」の項目から取る */
 const catOf = (v) => textOf(v, "category") || (v.items || []).find((i) => /業種|ジャンル|カテゴリ/.test(i.label || "") && i.value)?.value || "";
 /* 住所：住所の項目がなければ 県・市・区 をつなげる */
+/* 業種（飲食店・美容院・アパレル・整体・整骨院・不動産・建築・土木・その他）。以前の自由入力の値は選別し直して表示。未入力は "" */
+const industryOf = (v) => { const c = catOf(v); return !c ? "" : INDUSTRIES.includes(c) ? c : (classifyIndustry(c, textOf(v, "shopName")) || "その他"); };
 const addressOf = (v) => textOf(v, "address") || (v.items || []).find((i) => /住所|所在地/.test(i.label || "") && i.value)?.value || placeOf(v);
 const shopOf = (v) => cleanName(textOf(v, "shopName")) || textOf(v, "shopName") || "";
 const placeOf = (v) => { const p = placeParts(v); return [p.prefecture, p.city, p.ward].join("") || textOf(v, "area"); };
@@ -1377,6 +1386,12 @@ function isMine(v) {
   // 自分＝担当者名が固定した自分の名前の訪問（名前未設定なら、自分が登録した訪問）
   return myName ? personOf(v) === myName : v.authorUid === currentUser?.uid;
 }
+function refreshIndustryOptions() {
+  const sel = $("#visitIndustry");
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">すべての業種</option>` + INDUSTRIES.map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join("") + `<option value="${NO_PERSON}">業種 未入力</option>`;
+  sel.value = [...sel.options].some((o) => o.value === cur) ? cur : "";
+}
 function refreshPersonOptions() {
   const sel = $("#visitPerson");
   const cur = sel.value ?? "__me"; // 「全員」（空文字）も、そのまま保つ
@@ -1399,6 +1414,7 @@ function keywordMatch(v, q) {
   return q.split(/\s+/).every((w) => text.includes(w));
 }
 $("#visitPerson").addEventListener("change", renderVisitList);
+$("#visitIndustry").addEventListener("change", renderVisitList);
 $("#visitSearch").addEventListener("input", renderVisitList);
 
 function filteredVisits() {
@@ -1407,7 +1423,7 @@ function filteredVisits() {
   const p = $("#visitPerson").value;
   const q = $("#visitSearch").value.trim().toLowerCase();
   return visits
-    .filter((v) => (!f || v.visitDate === f) && personMatch(v, p) && keywordMatch(v, q))
+    .filter((v) => (!f || v.visitDate === f) && personMatch(v, p) && industryMatch(v, $("#visitIndustry").value) && keywordMatch(v, q))
     .sort(VISIT_SORTERS[sort] || VISIT_SORTERS.caseDesc);
 }
 
@@ -1498,7 +1514,7 @@ $("#visitList").addEventListener("click", async (e) => {
       if (!it) { it = { id: f.id, label: f.label, type: f.type, value: "" }; items.push(it); }
       if (!it.value) it.value = info[key];
     });
-    if (!catOf({ items })) items.push({ id: "category", label: "業種", type: "text", value: info.category });
+    if (!catOf({ items })) items.push({ id: "category", label: "業種", type: "select", value: info.category });
     await updateDoc(doc(db, "visits", v.id), { items, updatedAt: serverTimestamp(), updatedBy: currentUser.email });
     toast(`業種を「${info.category}」に入れました`);
   } catch (err) { showBanner(err, "業種の自動入力"); fb.disabled = false; fb.textContent = label; }
@@ -1512,6 +1528,7 @@ function renderVisitList() {
   if (!currentUser) return;
   updateCaseNoList();
   refreshPersonOptions();
+  refreshIndustryOptions();
   renderPersonCounts();
   const list = filteredVisits();
   const f = $("#visitFilterDate").value;
@@ -1539,7 +1556,7 @@ function renderVisitList() {
     const subIds = ["area", "prefecture", "city", "ward", "category", "hours"];
     const time = items.find((i) => i.type === "time" && i.value)?.value || "";
     const pp = placeParts(v);
-    const cat = catOf(v);
+    const cat = industryOf(v);
     const hoursTxt = textOf(v, "hours");
     const when = [
       !grouped && v.visitDate ? `📅 ${esc(fmtDateJa(v.visitDate))}` : "",
@@ -1877,7 +1894,7 @@ function visitMiniHtml(v, opts = {}) {
   return `<div class="mini-row">
     <div class="mini-main">
       <div class="mini-title">${time ? `<b>${esc(fmtHour(time))}</b> ` : ""}${v.caseNo ? `<span class="case-no">${esc(v.caseNo)}</span> ` : ""}${esc(shopOf(v) || "（店舗名なし）")}</div>
-      <div class="mini-sub">${[opts.showDate && fmtDateJa(v.visitDate), placeOf(v), catOf(v)].filter(Boolean).map(esc).join(" · ")}</div>
+      <div class="mini-sub">${[opts.showDate && fmtDateJa(v.visitDate), placeOf(v), industryOf(v)].filter(Boolean).map(esc).join(" · ")}</div>
     </div>
     <div class="btn-row" style="margin:0">${st.html}
       ${maps ? `<a class="btn small" href="${esc(maps)}" target="_blank" rel="noopener">地図</a>` : ""}
@@ -1885,28 +1902,53 @@ function visitMiniHtml(v, opts = {}) {
     </div>
   </div>`;
 }
-let todayOffset = 0; // 0=今日 1=明日
+let schedMode = "0"; // "0"=今日 "1"=明日 "pick"=日付を選ぶ
+const schedDay = () => (schedMode === "1" ? tomorrow() : schedMode === "pick" ? ($("#schedDate").value || today()) : today());
 $("#todaySeg").addEventListener("click", (e) => {
   const b = e.target.closest("[data-day]");
   if (!b) return;
-  todayOffset = Number(b.dataset.day);
+  schedMode = b.dataset.day;
+  if (schedMode === "pick" && !$("#schedDate").value) $("#schedDate").value = today();
   renderToday();
 });
+$("#schedDate").addEventListener("change", () => { schedMode = "pick"; renderToday(); });
+["#schedPerson", "#schedIndustry", "#schedStatus"].forEach((id) => $(id).addEventListener("change", renderToday));
+$("#schedClear").addEventListener("click", () => { $("#schedPerson").value = "__me"; $("#schedIndustry").value = ""; $("#schedStatus").value = ""; renderToday(); });
+
+/* 予定の絞り込み用の選択肢（担当者・業種） */
+function refreshSchedOptions() {
+  const p = $("#schedPerson"), i = $("#schedIndustry");
+  const curP = p.value ?? "__me", curI = i.value;
+  const names = [...new Set(visits.map(personOf).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja"));
+  p.innerHTML = `<option value="__me">自分${myName ? `（${esc(myName)}）` : ""}</option><option value="">全員</option>` +
+    names.filter((n) => n !== myName).map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("") + `<option value="${NO_PERSON}">担当者なし</option>`;
+  p.value = [...p.options].some((o) => o.value === curP) ? curP : "__me";
+  i.innerHTML = `<option value="">すべての業種</option>` + INDUSTRIES.map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join("") + `<option value="${NO_PERSON}">業種 未入力</option>`;
+  i.value = [...i.options].some((o) => o.value === curI) ? curI : "";
+}
+const industryMatch = (v, f) => !f || (f === NO_PERSON ? !industryOf(v) : industryOf(v) === f);
+
 function renderToday() {
   if (!currentUser || !$("#todayVisits")) return;
   const t = today();
-  const day = todayOffset ? tomorrow() : t;
-  const dayWord = todayOffset ? "明日" : "今日";
-  document.querySelectorAll("#todaySeg .seg-btn").forEach((b) => b.classList.toggle("active", Number(b.dataset.day) === todayOffset));
-  $("#todayTitle").textContent = `${dayWord}の予定（${fmtDateJa(day)}）`;
-  const mine = visits.filter((v) => v.visitDate === day && isMine(v))
+  const day = schedDay();
+  const dayWord = schedMode === "0" ? "今日" : schedMode === "1" ? "明日" : fmtDateJa(day);
+  document.querySelectorAll("#todaySeg .seg-btn").forEach((b) => b.classList.toggle("active", b.dataset.day === schedMode));
+  $("#schedDate").classList.toggle("hidden", schedMode !== "pick");
+  refreshSchedOptions();
+  const pF = $("#schedPerson").value, iF = $("#schedIndustry").value, stF = $("#schedStatus").value;
+  $("#schedClear").classList.toggle("hidden", pF === "__me" && !iF && !stF);
+  $("#todayTitle").textContent = schedMode === "pick" ? `${fmtDateJa(day)}の予定` : `${dayWord}の予定（${fmtDateJa(day)}）`;
+  const mine = visits.filter((v) => v.visitDate === day && personMatch(v, pF) && industryMatch(v, iF)
+      && (!stF || (stF === "done") === visitStatus(v).done))
     .sort((a, b) => timeOf(a).localeCompare(timeOf(b)) || caseNum(a) - caseNum(b));
+  const who = pF === "__me" ? "自分の" : pF === "" ? "全員の" : pF === NO_PERSON ? "担当者なしの" : `${pF}さんの`;
   const route = mapsDirUrl(mine);
   $("#todayVisits").innerHTML = mine.length
-    ? `<p class="hint">自分の訪問 ${mine.length}件（報告済み ${mine.filter((v) => visitStatus(v).done).length}件）</p>` +
+    ? `<p class="hint">${who}訪問 ${mine.length}件（報告済み ${mine.filter((v) => visitStatus(v).done).length}件）</p>` +
       mine.map((v) => visitMiniHtml(v)).join("") +
-      (route ? `<div class="btn-row"><a class="btn" href="${esc(route)}" target="_blank" rel="noopener">🗺 ${dayWord}のルートをGoogleマップで開く</a></div>` : "")
-    : `<p class="empty">${dayWord}の訪問予定はありません${myName ? "" : "<br><small>右上の「👤 名前」で自分の名前を固定すると、自分の予定が表示されます</small>"}</p>`;
+      (route ? `<div class="btn-row"><a class="btn" href="${esc(route)}" target="_blank" rel="noopener">🗺 この予定のルートをGoogleマップで開く</a></div>` : "")
+    : `<p class="empty">${esc(dayWord)}の${esc(who)}訪問予定はありません${pF === "__me" && !myName ? "<br><small>右上の「👤 名前」で自分の名前を固定すると、自分の予定が表示されます</small>" : ""}${pF || iF || stF ? "<br><small>絞り込みを変えると、ほかの予定も見られます</small>" : ""}</p>`;
 
   // 次回アクション：自分の報告で、予定日が今日まで・未対応のもの
   const acts = reports.filter((r) => isMyReport(r) && !r.naDone).map((r) => {
@@ -2263,7 +2305,7 @@ const visitNeedsRepair = (v) => {
   const sn = textOf(v, "shopName");
   const hasMaps = (v.items || []).some((i) => i.type === "maps" && i.value);
   if (!hasMaps) return false;
-  return /[\n〒]/.test(sn) || sn.length > 40 || !textOf(v, "prefecture") || !catOf(v);
+  return /[\n〒]/.test(sn) || sn.length > 40 || !textOf(v, "prefecture") || !INDUSTRIES.includes(catOf(v));
 };
 $("#repairVisits").addEventListener("click", async () => {
   if (!isAdmin()) return;

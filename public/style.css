@@ -299,3 +299,108 @@ body:not(.logged-in) .hidden-logged-out { display: none; }
 .visit-sub .vtime select { width: auto; margin: 0; }
 .tag.cat { background: #fff4e0; border-color: #f0d9aa; color: #7a4b00; }
 .tag.none { background: #f4f4f4; border-color: #ddd; color: #888; }
+
+/* =====================================================
+   デザイン刷新：やわらかい白＋濃いネイビー、大きな角丸、下タブ
+   ===================================================== */
+:root {
+  --bg: #eef1f6;
+  --card: #ffffff;
+  --text: #141923;
+  --muted: #7a8394;
+  --line: #e8ecf2;
+  --primary: #161b27;
+  --primary-text: #ffffff;
+  --soft: #f3f5f9;
+  --danger: #d23a3a;
+  --radius: 20px;
+  --shadow: 0 10px 30px rgba(24, 34, 56, .07), 0 2px 6px rgba(24, 34, 56, .04);
+}
+body { background: linear-gradient(180deg, #f6f8fb 0%, var(--bg) 100%) fixed; padding-bottom: 96px; letter-spacing: .01em; }
+main { padding: 8px 16px 16px; }
+
+/* 上のバー：枠をなくして軽く */
+.topbar { background: rgba(246, 248, 251, .88); backdrop-filter: blur(10px); border-bottom: none; padding: 12px 18px 8px; }
+.topbar h1 { font-size: 20px; font-weight: 800; letter-spacing: .02em; }
+.user-email { font-size: 12px; }
+
+/* カード */
+.card { border: none; border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; margin-bottom: 16px; }
+.card h2 { font-size: 20px; font-weight: 800; margin-bottom: 14px; }
+.notice { border-radius: 14px; }
+
+/* 入力欄：枠なしのやわらかいグレー */
+label { color: #2a3140; }
+input, select, textarea { background: var(--soft); border: 1px solid transparent; border-radius: 14px; padding: 12px 14px; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px rgba(22, 27, 39, .08); }
+select { appearance: none; -webkit-appearance: none; padding-right: 34px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%237a8394' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; }
+
+/* ボタン：Play／Shuffleのような、濃い＋薄い */
+.btn { border: none; background: var(--soft); border-radius: 14px; padding: 11px 16px; font-weight: 600; transition: transform .08s, box-shadow .15s, background .15s; }
+.btn:hover { background: #e9edf4; }
+.btn:active { transform: scale(.97); }
+.btn.primary { background: var(--primary); color: #fff; box-shadow: 0 8px 18px rgba(22, 27, 39, .22); }
+.btn.primary:hover { background: #232a3b; filter: none; }
+.btn.ghost { background: transparent; }
+.btn.danger { background: #fdeeee; color: var(--danger); }
+.btn.small { padding: 7px 12px; font-size: 13px; border-radius: 12px; }
+.link-btn { color: #3a4a6b; font-weight: 600; }
+
+/* 下のタブ（アプリのナビゲーション） */
+.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; margin: 0; padding: 8px 10px calc(10px + env(safe-area-inset-bottom)); gap: 2px; justify-content: space-around; background: #fff; border-radius: 26px 26px 0 0; box-shadow: 0 -8px 30px rgba(24, 34, 56, .10); overflow: visible; }
+.tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 2px; border: none; border-radius: 16px; font-size: 10.5px; font-weight: 600; color: #8a93a4; white-space: nowrap; }
+.tab.hidden { display: none; }
+.tab svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.tab.active { color: var(--primary); font-weight: 800; border-bottom: none; }
+.tab.active svg { stroke-width: 2.1; }
+.tab.active span { color: var(--primary); }
+.tabs { max-width: 760px; margin: 0 auto; }
+@media (min-width: 780px) { .tabs { left: 50%; transform: translateX(-50%); width: 760px; } }
+
+/* 予定の絞り込み */
+.sched-filters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 6px; }
+.sched-filters label { margin: 0; font-size: 12px; color: var(--muted); }
+.sched-filters select { padding: 10px 28px 10px 12px; font-size: 14px; background-position: right 10px center; }
+#schedDate { margin: 0 0 10px; max-width: 220px; }
+@media (max-width: 520px) { .sched-filters { grid-template-columns: 1fr 1fr; } .sched-filters label:last-child { grid-column: 1 / -1; } }
+
+/* セグメント（今日／明日） */
+.seg { display: flex; background: var(--soft); border-radius: 16px; padding: 4px; margin: 2px 0 12px; width: 100%; border: none; }
+.seg-btn { flex: 1; border-radius: 12px; padding: 9px 10px; font-weight: 700; color: #5b6475; background: transparent; }
+.seg-btn.active { background: var(--primary); color: #fff; box-shadow: 0 6px 14px rgba(22, 27, 39, .25); }
+
+/* 一覧の行：曲リストのような余白と区切り */
+.mini-row { padding: 14px 4px; border-bottom: 1px solid var(--line); }
+.mini-title { font-size: 16px; font-weight: 700; }
+.mini-title b { display: inline-block; background: var(--soft); border-radius: 8px; padding: 0 8px; margin-right: 4px; font-size: 13px; }
+.mini-sub { color: var(--muted); font-size: 13px; }
+.visit-item, .report-card { border: none; border-radius: 18px; box-shadow: var(--shadow); background: #fff; padding: 16px; margin-bottom: 14px; }
+.visit-item.is-done { opacity: .75; }
+.report-title { font-size: 18px; font-weight: 800; }
+.report-sub, .visit-sub { color: var(--muted); }
+.row-card { border: none; background: var(--soft); border-radius: 16px; }
+.na-box { background: var(--soft); border: none; border-radius: 14px; }
+.group-title { border-bottom: none; font-size: 14px; color: var(--muted); letter-spacing: .04em; }
+.report-foot { border-top: 1px solid var(--line); padding-top: 10px; }
+
+/* ラベル類 */
+.case-no { background: var(--primary); color: #fff; border-radius: 8px; padding: 2px 9px; font-size: 12.5px; font-weight: 700; letter-spacing: .04em; }
+.badge { background: var(--soft); border-radius: 999px; padding: 3px 10px; font-weight: 700; }
+.tag { background: var(--soft); border: none; color: #3a4558; border-radius: 999px; padding: 3px 11px; }
+.tag.cat { background: var(--primary); color: #fff; }
+.tag.none { background: #f6f7f9; color: #9aa2b1; }
+.pc-chip { border: none; background: var(--soft); padding: 5px 12px; font-weight: 600; }
+.pc-chip.active { background: var(--primary); color: #fff; }
+.person-counts { background: var(--soft); border-radius: 16px; }
+.sub-tab { border: none; background: var(--soft); }
+.sub-tab.active { background: var(--primary); }
+.auth-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+.stats-summary div { background: var(--soft); border: none; border-radius: 16px; }
+.field-row { border: none; background: var(--soft); border-radius: 14px; }
+.bulk-box { border-radius: 18px; }
+
+/* メッセージ（下のタブより上に出す） */
+.toast { bottom: 100px; background: var(--primary); box-shadow: 0 10px 24px rgba(0, 0, 0, .25); z-index: 40; }
+.auth { margin-top: 32px; }
+.topbar { position: static; }
+.topbar-actions .btn.ghost { background: #fff; box-shadow: 0 2px 6px rgba(24,34,56,.06); }

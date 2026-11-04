@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DC 完了報告</title>
-<meta name="theme-color" content="#1d4ed8">
+<meta name="theme-color" content="#161b27">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -96,22 +96,30 @@
     </div>
 
     <nav class="tabs">
-      <button class="tab active" data-tab="today" type="button">今日</button>
-      <button class="tab" data-tab="list" type="button">報告一覧</button>
-      <button class="tab" data-tab="form" type="button">完了報告</button>
-      <button class="tab" data-tab="visits" type="button">翌日訪問リスト</button>
-      <button class="tab hidden" data-tab="stats" id="statsTab" type="button">集計</button>
-      <button class="tab hidden" data-tab="admin" id="adminTab" type="button">管理</button>
+      <button class="tab active" data-tab="today" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>予定</span></button>
+      <button class="tab" data-tab="list" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6.5h12M8 12h12M8 17.5h12"/><circle cx="4" cy="6.5" r="1" /><circle cx="4" cy="12" r="1"/><circle cx="4" cy="17.5" r="1"/></svg><span>報告一覧</span></button>
+      <button class="tab" data-tab="form" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3.5" width="16" height="17" rx="3"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg><span>完了報告</span></button>
+      <button class="tab" data-tab="visits" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0113 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg><span>訪問リスト</span></button>
+      <button class="tab hidden" data-tab="stats" id="statsTab" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M12 20V4M19 20v-6"/></svg><span>集計</span></button>
+      <button class="tab hidden" data-tab="admin" id="adminTab" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/></svg><span>管理</span></button>
     </nav>
 
     <!-- 今日 -->
     <div id="tab-today" class="tab-panel">
       <div class="card">
-        <h2 id="todayTitle">今日の予定</h2>
+        <h2 id="todayTitle">予定</h2>
         <div class="seg" id="todaySeg">
           <button type="button" class="seg-btn active" data-day="0">今日</button>
           <button type="button" class="seg-btn" data-day="1">明日</button>
+          <button type="button" class="seg-btn" data-day="pick">日付を選ぶ</button>
         </div>
+        <input type="date" id="schedDate" class="hidden">
+        <div class="sched-filters">
+          <label>担当者<select id="schedPerson"><option value="__me">自分</option><option value="">全員</option></select></label>
+          <label>業種<select id="schedIndustry"><option value="">すべての業種</option></select></label>
+          <label>状態<select id="schedStatus"><option value="">すべて</option><option value="todo">未報告</option><option value="done">報告済み</option></select></label>
+        </div>
+        <button class="link-btn hidden" type="button" id="schedClear">絞り込みをクリア</button>
         <div id="todayVisits"></div>
       </div>
       <div class="card">
@@ -200,6 +208,9 @@
         <div class="filter-row">
           <label>担当者
             <select id="visitPerson"><option value="__me">自分</option><option value="">全員</option></select>
+          </label>
+          <label>業種
+            <select id="visitIndustry"><option value="">すべての業種</option></select>
           </label>
           <label>表示する訪問日
             <input type="date" id="visitFilterDate">
