@@ -257,11 +257,11 @@ async function handle(req, env) {
     info.categoryRaw = raw;
     let industry = classifyIndustry(raw, info.name);
     let source = raw ? "Googleの業種名" : "";
-    if ((!industry || industry === "その他") && info.summary) {
+    if (!industry && info.summary) {
       const s = classifyIndustry("", info.summary);
       if (s) { industry = s; source = "Googleの紹介文"; }
     }
-    if ((!industry || industry === "その他") && info.website) {
+    if (!industry && info.website) {
       const w = classifyIndustry("", await siteText(info.website));
       if (w) { industry = w; source = "ホームページ"; }
     }
