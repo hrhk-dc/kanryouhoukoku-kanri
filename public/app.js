@@ -55,6 +55,7 @@ const FORMATS = {
       { id: "receivedAt", label: "受付日時", type: "datetime", required: false },
       { id: "result", label: "結果", type: "select", required: true, options: ["成約", "検討中", "不在", "断り"] },
       { id: "demoUrl", label: "デモサイトURL", type: "url", required: false },
+      { id: "wealth", label: "お客様の資力（お金のあるなし：1=少ない 〜 10=とても多い）", type: "select", required: false, options: ["1","2","3","4","5","6","7","8","9","10"] },
       { id: "memo", label: "メモ", type: "textarea", required: false }
     ]
   },
@@ -423,7 +424,7 @@ function subscribe() {
     unsubs.push(onSnapshot(doc(db, "settings", def.doc), (snap) => {
       const data = snap.exists() ? snap.data() : null;
       formats[key] = data && Array.isArray(data.fields) && data.fields.length ? data.fields : clone(def.fields);
-      if (key === "report") reportPhotoAdded = !!(data && data.photoFieldAdded);
+      if (key === "report") { reportPhotoAdded = !!(data && data.photoFieldAdded); reportWealthAdded = !!(data && data.wealthFieldAdded); }
       normalizeFormat(key);
       if (key === "visit") { visitAutoAdded = !!(data && data.autoFieldsAdded); addAutoVisitFields(); }
       if (key === "nextAction") {
@@ -479,10 +480,15 @@ function addAutoVisitFields() {
 }
 
 let reportPhotoAdded = false;
+let reportWealthAdded = false;
 function normalizeFormat(key) {
   if (key === "nextAction") formats.nextAction.forEach((f) => delete f.locked);
   if (key === "report" && !reportPhotoAdded && !formats.report.some((f) => f.type === "photo")) {
     formats.report.push({ id: "photos", label: "写真", type: "photo", required: false });
+  }
+  if (key === "report" && !reportWealthAdded && !formats.report.some((f) => f.id === "wealth")) {
+    const at = formats.report.findIndex((f) => f.id === "result");
+    formats.report.splice(at >= 0 ? at + 1 : formats.report.length, 0, clone(FORMATS.report.fields.find((f) => f.id === "wealth")));
   }
   if (key === "report") {
     const f = formats.report.find((x) => x.type === "caseNo" || x.id === "caseNo");
@@ -938,10 +944,11 @@ function renderList() {
       caseNo && `<span class="case-no">${esc(caseNo)}</span>`,
       (() => { const v = visitOfReport(r); const ad = v ? addressOf(v) : ""; return ad && `🏠 ${esc(ad)}`; })(),
       itemVal(r.items, "visitTo") && itemVal(r.items, "visitTo") !== title && `📍 ${esc(itemVal(r.items, "visitTo"))}`,
+      itemVal(r.items, "wealth") && `💰 資力 ${esc(itemVal(r.items, "wealth"))}/10`,
       itemVal(r.items, "personName") && `👤 ${esc(itemVal(r.items, "personName"))}`,
       firstOfType(r.items, ["datetime"]) && `🕒 受付 ${esc(firstOfType(r.items, ["datetime"]).replace("T", " "))}`
     ].filter(Boolean);
-    const shown = ["caseNo", "caseName", "result", "visitTo", "personName"];
+    const shown = ["caseNo", "caseName", "result", "visitTo", "personName", "wealth"];
     const rest = (r.items || []).filter((i) => !shown.includes(i.id));
 
     const na = naItemsOf(r);
@@ -1671,7 +1678,7 @@ $("#saveFormat").addEventListener("click", async () => {
     };
     if (adminSection === "nextAction") data.sectionRequired = draftNaRequired;
     if (adminSection === "visit") data.autoFieldsAdded = true;
-    if (adminSection === "report") data.photoFieldAdded = true;
+    if (adminSection === "report") { data.photoFieldAdded = true; data.wealthFieldAdded = true; }
     await setDoc(doc(db, "settings", FORMATS[adminSection].doc), data);
     toast(`「${FORMATS[adminSection].title}」のフォーマットを保存しました`);
   } catch (err) {
