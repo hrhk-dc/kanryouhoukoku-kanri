@@ -1476,6 +1476,33 @@ $("#visitList").addEventListener("change", async (e) => {
     toast(sel.value ? `${parseInt(sel.value, 10)}時に変更しました` : "時間を未定にしました");
   } catch (err) { showBanner(err, "訪問予定時刻の変更"); renderVisitList(); }
 });
+/* 業種が空の訪問先を、Googleマップから読み取って自動入力（空の項目だけ埋める） */
+$("#visitList").addEventListener("click", async (e) => {
+  const fb = e.target.closest("button[data-fillcat]");
+  if (!fb) return;
+  const v = visits.find((x) => x.id === fb.dataset.fillcat);
+  const url = (v?.items || []).find((i) => i.type === "maps" && i.value)?.value;
+  if (!v || !canModify(v)) return;
+  if (!url) { toast("この訪問先にはGoogleマップのリンクがないので、「編集」から業種を入力してください"); return; }
+  const label = fb.textContent;
+  fb.disabled = true; fb.textContent = "読み取り中…";
+  try {
+    lookupCache.delete(url);
+    const info = await mapsLookup(url);
+    if (!info.ok || !info.category) { toast(info.ok ? "Googleマップに業種の情報がありませんでした。「編集」から入力してください" : (info.error || "読み取れませんでした")); fb.disabled = false; fb.textContent = label; return; }
+    const items = clone(v.items || []);
+    formats.visit.filter((f) => f.type !== "maps").forEach((f) => {
+      const key = LOOKUP_MAP[f.id] || autoKeyByLabel(f.label, f.type);
+      if (!key || !info[key]) return;
+      let it = items.find((i) => i.id === f.id);
+      if (!it) { it = { id: f.id, label: f.label, type: f.type, value: "" }; items.push(it); }
+      if (!it.value) it.value = info[key];
+    });
+    if (!catOf({ items })) items.push({ id: "category", label: "業種", type: "text", value: info.category });
+    await updateDoc(doc(db, "visits", v.id), { items, updatedAt: serverTimestamp(), updatedBy: currentUser.email });
+    toast(`業種を「${info.category}」に入れました`);
+  } catch (err) { showBanner(err, "業種の自動入力"); fb.disabled = false; fb.textContent = label; }
+});
 $("#visitList").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-vmove]");
   if (b) moveVisit(b.dataset.id, Number(b.dataset.vmove));
@@ -1521,7 +1548,7 @@ function renderVisitList() {
     const tags = [["都道府県", pp.prefecture], ["市", pp.city], ["区", pp.ward]]
       .filter(([, val]) => val)
       .map(([k, val]) => `<span class="tag" title="${k}">${esc(val)}</span>`).join("") +
-      (cat ? `<span class="tag cat" title="業種">🏷 ${esc(cat)}</span>` : `<span class="tag none" title="業種">🏷 業種：未取得</span>`);
+      (cat ? `<span class="tag cat" title="業種">🏷 ${esc(cat)}</span>` : `<span class="tag none" title="業種">🏷 業種：未取得</span>${canModify(v) ? `<button class="btn small" type="button" data-fillcat="${esc(v.id)}">業種を自動入力</button>` : ""}`);
     const hoursHtml = hoursTxt ? `<p class="visit-hours">🕒 営業時間：${esc(hoursTxt.split("\n")[0])}${hoursTxt.includes("\n") ? ` <small>ほか（下の「店舗の詳細」に全部あります）</small>` : ""}</p>` : "";
     const moveBtns = sort === "manual" ? `<span class="move-btns"><button class="btn small" type="button" data-vmove="-1" data-id="${esc(v.id)}" title="上へ">↑</button><button class="btn small" type="button" data-vmove="1" data-id="${esc(v.id)}" title="下へ">↓</button></span>` : "";
     const rest = items.filter((i, k) => k !== titleIdx && !subIds.includes(i.id) && i.type !== "time");
