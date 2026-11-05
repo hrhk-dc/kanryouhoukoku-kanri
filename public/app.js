@@ -117,6 +117,64 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove("show"), 1600);
 }
 
+/* ---------- 戻る／進む（削除・変更の取り消しとやり直し） ---------- */
+// 履歴はこの画面を開いている間だけ覚えています（再読み込みやログアウトで消えます）
+const undoHist = { undo: [], redo: [], busy: false };
+const HISTORY_MAX = 30;
+// 日時（Timestamp）はそのまま残したいので、JSONを通さず浅くコピーする
+const snapDoc = (x) => { const d = { ...x }; delete d.id; delete d.demoUrl; if (d.items) d.items = clone(d.items); if (d.nextActionItems) d.nextActionItems = clone(d.nextActionItems); return d; };
+const pickFields = (x, keys) => { const o = {}; keys.forEach((k) => { if (x[k] !== undefined) o[k] = clone(x[k]); }); return o; };
+function updateHistoryButtons() {
+  const u = $("#undoBtn"), r = $("#redoBtn");
+  if (!u || !r) return;
+  u.disabled = undoHist.busy || !undoHist.undo.length;
+  r.disabled = undoHist.busy || !undoHist.redo.length;
+  u.title = undoHist.undo.length ? `元に戻す：${undoHist.undo[undoHist.undo.length - 1].label}` : "直前の削除・変更を元に戻す";
+  r.title = undoHist.redo.length ? `やり直す：${undoHist.redo[undoHist.redo.length - 1].label}` : "元に戻した操作をやり直す";
+}
+function recordHistory(entry) {
+  undoHist.undo.push(entry);
+  if (undoHist.undo.length > HISTORY_MAX) undoHist.undo.shift();
+  undoHist.redo = [];
+  updateHistoryButtons();
+}
+// before / after：その時点のデータ（null は「存在しない」）。更新のときは変わった項目だけ
+function historyDelete(col, r, label) { recordHistory({ label, col, id: r.id, before: snapDoc(r), after: null }); }
+function historyUpdate(col, r, keys, after, label) {
+  recordHistory({ label, col, id: r.id, before: pickFields(r, keys), after: pickFields(after, keys) });
+}
+async function applyHistory(e, dir) {
+  const target = dir === "undo" ? e.before : e.after;
+  const other = dir === "undo" ? e.after : e.before;
+  const ref = doc(db, e.col, e.id);
+  if (target === null) { await deleteDoc(ref); return; }
+  if (other === null) { await setDoc(ref, target); return; }
+  await updateDoc(ref, { ...clone(target), updatedAt: serverTimestamp(), updatedBy: currentUser.email });
+}
+async function runHistory(dir) {
+  const from = dir === "undo" ? undoHist.undo : undoHist.redo;
+  const to = dir === "undo" ? undoHist.redo : undoHist.undo;
+  const e = from[from.length - 1];
+  if (!e || undoHist.busy) return;
+  undoHist.busy = true; updateHistoryButtons();
+  try {
+    await applyHistory(e, dir);
+    from.pop(); to.push(e);
+    toast(`${dir === "undo" ? "元に戻しました" : "やり直しました"}：${e.label}`);
+  } catch (err) { showBanner(err, dir === "undo" ? "元に戻す" : "やり直し"); }
+  undoHist.busy = false; updateHistoryButtons();
+}
+$("#undoBtn")?.addEventListener("click", () => runHistory("undo"));
+$("#redoBtn")?.addEventListener("click", () => runHistory("redo"));
+document.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+  const k = e.key.toLowerCase();
+  if (k === "z" && !e.shiftKey) { e.preventDefault(); runHistory("undo"); }
+  else if ((k === "z" && e.shiftKey) || k === "y") { e.preventDefault(); runHistory("redo"); }
+});
+
 async function copyText(text) {
   if (!text) { toast("コピーする内容がありません"); return; }
   try {
@@ -384,7 +442,7 @@ $("#resendVerify").addEventListener("click", async () => {
 
 let membersUnsub = null;
 let dataLoaded = false;
-function stopData() { unsubs.forEach((u) => u()); unsubs = []; dataLoaded = false; }
+function stopData() { unsubs.forEach((u) => u()); unsubs = []; dataLoaded = false; undoHist.undo = []; undoHist.redo = []; undoHist.busy = false; updateHistoryButtons(); }
 
 onAuthStateChanged(auth, (user) => {
   currentUser = user;
@@ -829,11 +887,13 @@ $("#reportForm").addEventListener("submit", async (e) => {
   try {
     if (editingId) {
       const c = targets[0];
+      const prevR = reports.find((x) => x.id === editingId);
       await updateDoc(doc(db, "reports", editingId), {
         items: c.items, nextActionItems: c.nextActionItems,
         updatedAt: serverTimestamp(),
         updatedBy: currentUser.email
       });
+      if (prevR) historyUpdate("reports", prevR, ["items", "nextActionItems"], c, "報告の編集");
       toast("更新しました");
     } else {
       const batch = writeBatch(db);
@@ -1038,8 +1098,8 @@ $("#reportList").addEventListener("click", async (e) => {
   if (!r || !canModify(r)) return;
   if (btn.dataset.edit) startEdit(r);
   if (btn.dataset.del) {
-    if (!confirm(`「${reportTitle(r)}」を削除しますか？元に戻せません。`)) return;
-    try { await deleteDoc(doc(db, "reports", r.id)); toast("削除しました"); }
+    if (!confirm(`「${reportTitle(r)}」を削除しますか？（上の「戻る」で元に戻せます）`)) return;
+    try { await deleteDoc(doc(db, "reports", r.id)); historyDelete("reports", r, `報告「${reportTitle(r)}」の削除`); toast("削除しました（「戻る」で復元できます）"); }
     catch (err) { showBanner(err, "削除"); }
   }
 });
@@ -1321,10 +1381,12 @@ $("#visitForm").addEventListener("submit", async (e) => {
   $("#saveVisits").disabled = true;
   try {
     if (editingVisitId) {
+      const prevV = visits.find((x) => x.id === editingVisitId);
       await updateDoc(doc(db, "visits", editingVisitId), {
         visitDate, items: filled[0].items,
         updatedAt: serverTimestamp(), updatedBy: currentUser.email
       });
+      if (prevV) historyUpdate("visits", prevV, ["visitDate", "items"], { visitDate, items: filled[0].items }, "訪問先の編集");
       toast("更新しました");
     } else {
       // 案件番号は共通カウンターから連番で取る（同時に保存しても番号が被らない）
@@ -1543,6 +1605,7 @@ $("#visitList").addEventListener("change", async (e) => {
   else items.push({ id: "visitTime", label: "訪問予定時刻", type: "time", value: sel.value });
   try {
     await updateDoc(doc(db, "visits", v.id), { items, updatedAt: serverTimestamp(), updatedBy: currentUser.email });
+    historyUpdate("visits", v, ["items"], { items }, "訪問時刻の変更");
     toast(sel.value ? `${parseInt(sel.value, 10)}時に変更しました` : "時間を未定にしました");
   } catch (err) { showBanner(err, "訪問予定時刻の変更"); renderVisitList(); }
 });
@@ -1570,6 +1633,7 @@ $("#visitList").addEventListener("click", async (e) => {
     });
     if (!catOf({ items })) items.push({ id: "category", label: "業種", type: "select", value: info.category });
     await updateDoc(doc(db, "visits", v.id), { items, updatedAt: serverTimestamp(), updatedBy: currentUser.email });
+    historyUpdate("visits", v, ["items"], { items }, "業種の自動入力");
     toast(`業種を「${info.category}」に入れました`);
   } catch (err) { showBanner(err, "業種の自動入力"); fb.disabled = false; fb.textContent = label; }
 });
@@ -1673,8 +1737,8 @@ $("#visitList").addEventListener("click", async (e) => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   if (btn.dataset.vdel) {
-    if (!confirm("この訪問先を削除しますか？元に戻せません。")) return;
-    try { await deleteDoc(doc(db, "visits", v.id)); toast("削除しました"); }
+    if (!confirm("この訪問先を削除しますか？（上の「戻る」で元に戻せます）")) return;
+    try { await deleteDoc(doc(db, "visits", v.id)); historyDelete("visits", v, "訪問先の削除"); toast("削除しました（「戻る」で復元できます）"); }
     catch (err) { showBanner(err, "削除"); }
   }
 });
@@ -2035,7 +2099,9 @@ document.addEventListener("click", async (e) => {
   if (!b) return;
   try {
     const r = reports.find((x) => x.id === b.dataset.naDone);
-    await updateDoc(doc(db, "reports", b.dataset.naDone), { naDone: true, nextActionItems: naItemsOf(r), updatedAt: serverTimestamp() });
+    const naAfter = { naDone: true, nextActionItems: naItemsOf(r) };
+    await updateDoc(doc(db, "reports", b.dataset.naDone), { ...naAfter, updatedAt: serverTimestamp() });
+    if (r) recordHistory({ label: "次回アクションの対応済み", col: "reports", id: r.id, before: { naDone: r.naDone === true, nextActionItems: clone(r.nextActionItems || []) }, after: clone(naAfter) });
     toast("次回アクションを対応済みにしました");
   } catch (err) { showBanner(err, "次回アクションの更新"); }
 });
