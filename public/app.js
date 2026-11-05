@@ -201,7 +201,15 @@ $("#copyAppLink").addEventListener("click", () => copyText(window.location.origi
 
 /* ---------- ホーム画面アプリ（PWA） ---------- */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+  // 新しい版が公開されたら、開いている画面も自動で最新に切り替える
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || reloaded) return;
+    reloaded = true;
+    location.reload();
+  });
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").then((reg) => reg.update()).catch(() => {}));
 }
 let installPrompt = null;
 window.addEventListener("beforeinstallprompt", (e) => {
