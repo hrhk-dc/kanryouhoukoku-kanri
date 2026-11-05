@@ -48,7 +48,13 @@ function parseMapsUrl(u) {
   const qll = q.match(/^\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
   const ll = pin || at || qll;
   if (ll) { out.lat = parseFloat(ll[1]); out.lng = parseFloat(ll[2]); }
-  if (!out.name && q && !qll) out.name = q.trim();
+  // 店舗ID（place_id）形式のリンク：?q=place_id:ChIJ… ／ query_place_id=ChIJ… ／ place_id=ChIJ…
+  const pid = (q.match(/^\s*place_id:\s*([\w-]+)/i) || [])[1]
+    || url.searchParams.get("query_place_id") || url.searchParams.get("place_id") || "";
+  if (pid) out.placeId = pid.trim();
+  // cid=数字 形式のリンク（Places APIでは引けない）
+  if (!out.placeId && url.searchParams.get("cid")) out.cidOnly = true;
+  if (!out.name && q && !qll && !/^\s*place_id:/i.test(q)) out.name = q.trim();
   return out;
 }
 
@@ -160,19 +166,41 @@ async function placesLookup(key, name, lat, lng) {
     body: JSON.stringify(body)
   });
   const j = await r.json();
-  if (!r.ok) {
-    const reason = j?.error?.details?.find((d) => d.reason)?.reason || j?.error?.status || "";
-    const hint = {
-      API_KEY_INVALID: "キーの文字列が正しくありません。Google Cloudの「認証情報」からキーをコピーし直し、Cloudflareの GOOGLE_MAPS_API_KEY に貼り直してください",
-      SERVICE_DISABLED: "Google Cloudで「Places API (New)」が有効になっていません",
-      API_KEY_SERVICE_BLOCKED: "キーの「APIの制限」で Places API (New) が許可されていません",
-      API_KEY_HTTP_REFERRER_BLOCKED: "キーの「アプリケーションの制限」をウェブサイトにしていると使えません（「なし」にしてください）",
-      BILLING_DISABLED: "Google Cloudの請求先アカウントが有効になっていません",
-      PERMISSION_DENIED: "このキーではPlaces APIを使う権限がありません（APIの有効化・キーの制限を確認してください）"
-    }[reason];
-    throw new Error(hint || j?.error?.message || `Places API ${r.status}`);
-  }
-  const p = j.places?.[0];
+  if (!r.ok) throw placesError(r, j);
+  return mapPlace(j.places?.[0]);
+}
+
+// 店舗ID（place_id）から直接取得する（place_id形式のリンク用）
+async function placeDetails(key, placeId) {
+  const r = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}?languageCode=ja&regionCode=JP`, {
+    headers: {
+      "X-Goog-Api-Key": key,
+      "X-Goog-FieldMask": [
+        "displayName", "formattedAddress", "nationalPhoneNumber",
+        "regularOpeningHours.weekdayDescriptions", "primaryTypeDisplayName", "primaryType", "types",
+        "rating", "userRatingCount", "websiteUri", "location", "addressComponents", "editorialSummary"
+      ].join(",")
+    }
+  });
+  const j = await r.json();
+  if (!r.ok) throw placesError(r, j);
+  return mapPlace(j);
+}
+
+function placesError(r, j) {
+  const reason = j?.error?.details?.find((d) => d.reason)?.reason || j?.error?.status || "";
+  const hint = {
+    API_KEY_INVALID: "キーの文字列が正しくありません。Google Cloudの「認証情報」からキーをコピーし直し、Cloudflareの GOOGLE_MAPS_API_KEY に貼り直してください",
+    SERVICE_DISABLED: "Google Cloudで「Places API (New)」が有効になっていません",
+    API_KEY_SERVICE_BLOCKED: "キーの「APIの制限」で Places API (New) が許可されていません",
+    API_KEY_HTTP_REFERRER_BLOCKED: "キーの「アプリケーションの制限」をウェブサイトにしていると使えません（「なし」にしてください）",
+    BILLING_DISABLED: "Google Cloudの請求先アカウントが有効になっていません",
+    PERMISSION_DENIED: "このキーではPlaces APIを使う権限がありません（APIの有効化・キーの制限を確認してください）"
+  }[reason];
+  return new Error(hint || j?.error?.message || `Places API ${r.status}`);
+}
+
+function mapPlace(p) {
   if (!p) return {};
   // 住所の部品から 都道府県／市／区 を取り出す
   const comp = (type) => (p.addressComponents || []).find((c) => (c.types || []).includes(type))?.longText || "";
@@ -214,8 +242,14 @@ async function handle(req, env) {
 
     // 貼り付け時に混ざりがちな空白・改行・引用符を取り除く
     const key = (env.GOOGLE_MAPS_API_KEY || "").trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
-    if (key && (info.name || info.lat)) {
-      try { Object.assign(info, Object.fromEntries(Object.entries(await placesLookup(key, info.name || `${info.lat},${info.lng}`, info.lat, info.lng)).filter(([, v]) => v))); }
+    if (key && (info.placeId || info.name || info.lat)) {
+      try {
+        // 店舗IDがあればそれで直接、なければ店舗名（と座標）で探す
+        const found = info.placeId
+          ? await placeDetails(key, info.placeId)
+          : await placesLookup(key, info.name || `${info.lat},${info.lng}`, info.lat, info.lng);
+        Object.assign(info, Object.fromEntries(Object.entries(found).filter(([, v]) => v)));
+      }
       catch (e) {
         // キーの中身は出さず、形だけ確認できるようにする（正しいキーは AIza で始まる39文字）
         const shape = `［設定されているキー：${key.length}文字・${key.startsWith("AIza") ? "AIzaで始まる" : "AIzaで始まらない"}］`;
@@ -274,7 +308,9 @@ async function handle(req, env) {
     if (!info.address && info.area) info.address = info.area + (info.town || "");
 
     const found = !!(info.name || info.area);
-    return new Response(JSON.stringify({ ok: found, ...info, finalUrl, notes, error: found ? "" : "このリンクから店舗の情報を読み取れませんでした" }), { status: 200, headers });
+    const cidMsg = "このリンク（cid=…形式）は店舗を特定できません。Googleマップの「共有」→「リンクをコピー」で出るリンクを使ってください";
+    delete info.placeId;
+    return new Response(JSON.stringify({ ok: found, ...info, finalUrl, notes, error: found ? "" : (info.cidOnly ? cidMsg : "このリンクから店舗の情報を読み取れませんでした") }), { status: 200, headers });
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: "読み取り中にエラーが起きました：" + e.message }), { status: 200, headers });
   }

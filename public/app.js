@@ -1239,6 +1239,25 @@ $("#bulkAdd").addEventListener("click", async () => {
   $("#bulkLinks").value = "";
   await addLinksAsRows(links);
 });
+// 「貼り付け」ボタン：コピーしてあるリンクをそのまま取り込んで読み取る
+$("#bulkPaste").addEventListener("click", async () => {
+  const box = $("#bulkLinks");
+  if (!navigator.clipboard?.readText) {
+    box.focus();
+    toast("このブラウザではボタンで貼り付けできません。入力欄を長押し（またはCtrl+V）して貼り付けてください");
+    return;
+  }
+  try {
+    const text = (await navigator.clipboard.readText()) || "";
+    if (!text.trim()) { toast("コピーされたものがありません。先にGoogleマップのリンクをコピーしてください"); return; }
+    if (!splitLinks(text).length) { toast("コピーした内容にGoogleマップのリンクが見つかりませんでした"); return; }
+    box.value = box.value.trim() ? `${box.value.trim()}\n${text}` : text;
+    $("#bulkAdd").click();
+  } catch {
+    box.focus();
+    toast("貼り付けが許可されませんでした。入力欄を長押し（またはCtrl+V）して貼り付けてください");
+  }
+});
 // 貼り付けた瞬間に自動で読み取る（ボタンを押さなくてもOK）
 $("#bulkLinks").addEventListener("paste", () => setTimeout(() => {
   if (splitLinks($("#bulkLinks").value).length) $("#bulkAdd").click();

@@ -190,7 +190,10 @@
         <div class="bulk-box" id="bulkBox">
           <label for="bulkLinks" class="bulk-label">📋 Googleマップのリンクを貼り付けるだけでOK（1件でも、何件まとめてでも）</label>
           <textarea id="bulkLinks" rows="3" placeholder="ここにリンクを貼り付け&#10;https://maps.app.goo.gl/xxxx&#10;https://maps.app.goo.gl/yyyy&#10;（LINEのメッセージをそのまま貼ってもOK）"></textarea>
-          <div class="btn-row"><button class="btn small primary" type="button" id="bulkAdd">読み取って追加</button></div>
+          <div class="btn-row">
+            <button class="btn small primary" type="button" id="bulkPaste">📋 貼り付け</button>
+            <button class="btn small primary" type="button" id="bulkAdd">読み取って追加</button>
+          </div>
           <p class="hint">貼り付けると自動で読み取り、<b>リンク1つにつき1件</b>のカードを作ります。店舗名・住所・営業時間などは自動で入ります。間違っていたら、カードの中で直接書き換えてください。案件番号は保存したときに1件ずつ自動で付きます。</p>
         </div>
         <div id="visitRows"></div>
