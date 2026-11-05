@@ -1073,6 +1073,8 @@ function renderList() {
         <button class="btn small danger" type="button" data-del="${esc(r.id)}">削除</button>
       </span>` : "";
 
+    const demoUrl = itemVal(r.items, "demoUrl") || (() => { const v = visitOfReport(r); return v ? (v.demoUrl || itemVal(v.items, "demoUrl")) : ""; })();
+    const demoHtml = demoUrl ? `<div class="btn-row">${demoLinksHtml(demoUrl)}</div>` : "";
     const details = itemsDl(rest) + (na.some((i) => i.value) ? `<p class="details-sub">次回アクション</p>${itemsDl(na)}` : "");
 
     return `<article class="card report-card">
@@ -1081,6 +1083,7 @@ function renderList() {
         ${result ? `<span class="badge ${RESULT_CLASS[result] || ""}">${esc(result)}</span>` : ""}
       </div>
       ${subs.length ? `<p class="report-sub">${subs.join("<span class=\"sep\">·</span>")}</p>` : ""}
+      ${demoHtml}
       ${naHtml}
       ${details ? `<details class="report-details"><summary>詳細を表示</summary>${details}</details>` : ""}
       <div class="report-foot">
@@ -2005,6 +2008,7 @@ function mapsDirUrl(list) {
   if (stops.length > 1) u.searchParams.set("waypoints", stops.slice(0, -1).slice(0, 9).join("|"));
   return u.toString();
 }
+const demoLinksHtml = (url) => url ? `<a class="btn small" href="${esc(url)}" target="_blank" rel="noopener">🌐 デモサイト</a><button class="btn small" type="button" data-copy="${esc(url)}">デモURLをコピー</button>` : "";
 function visitMiniHtml(v, opts = {}) {
   const st = visitStatus(v);
   const maps = (v.items || []).find((i) => i.type === "maps" && i.value)?.value;
@@ -2016,6 +2020,7 @@ function visitMiniHtml(v, opts = {}) {
     </div>
     <div class="btn-row" style="margin:0">${st.html}
       ${maps ? `<a class="btn small" href="${esc(maps)}" target="_blank" rel="noopener">地図</a>` : ""}
+      ${demoLinksHtml(v.demoUrl || itemVal(v.items, "demoUrl"))}
       ${st.done ? "" : `<button class="btn small primary" type="button" data-report-visit="${esc(v.id)}">報告する</button>`}
     </div>
   </div>`;
