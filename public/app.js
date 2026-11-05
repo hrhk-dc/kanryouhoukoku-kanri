@@ -2019,7 +2019,7 @@ function mapsDirUrl(list) {
   if (stops.length > 1) u.searchParams.set("waypoints", stops.slice(0, -1).slice(0, 9).join("|"));
   return u.toString();
 }
-const demoLinksHtml = (url) => url ? `<a class="btn small" href="${esc(url)}" target="_blank" rel="noopener">🌐 デモサイト</a><button class="btn small" type="button" data-copy="${esc(url)}">デモURLをコピー</button>` : "";
+const demoLinksHtml = (url) => url ? `<a class="btn small" href="${esc(url)}" target="_blank" rel="noopener">🌐 デモサイト</a><a class="demo-url-link" href="${esc(url)}" target="_blank" rel="noopener">${esc(String(url).replace(/^https?:\/\//, ""))}</a><button class="btn small" type="button" data-copy="${esc(url)}">デモURLをコピー</button>` : "";
 function visitMiniHtml(v, opts = {}) {
   const st = visitStatus(v);
   const maps = (v.items || []).find((i) => i.type === "maps" && i.value)?.value;

@@ -407,3 +407,4 @@ select { appearance: none; -webkit-appearance: none; padding-right: 34px; backgr
 
 /* 報告一覧：店舗名の隣の業種 */
 .report-title .tag { font-size: 12px; font-weight: 600; margin-left: 6px; vertical-align: middle; }
+.demo-url-link { font-size: 12px; word-break: break-all; align-self: center; }
