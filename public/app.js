@@ -531,6 +531,7 @@ function subscribe() {
   unsubs.push(onSnapshot(query(collection(db, "visits"), orderBy("createdAt", "desc")), (snap) => {
     visits = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     applyDemoUrls();
+    renderList();
     renderVisitList();
     renderAllExtras();
   }, (err) => showBanner(err, "訪問リストの読み込み")));
@@ -2535,7 +2536,7 @@ async function loadDemoUrls() {
       const j = await r.json();
       const before = JSON.stringify(demoUrls);
       demoUrls = j.items || {};
-      if (JSON.stringify(demoUrls) !== before) { applyDemoUrls(); renderVisitList(); renderAllExtras(); }
+      if (JSON.stringify(demoUrls) !== before) { applyDemoUrls(); renderList(); renderVisitList(); renderAllExtras(); }
     }
   } catch { /* 取得できなくてもアプリは使える */ }
   demoTimer = setTimeout(loadDemoUrls, 5 * 60 * 1000); // 5分ごとに確認
