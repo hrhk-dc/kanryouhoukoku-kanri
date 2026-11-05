@@ -90,9 +90,28 @@ async function resolve(link) {
     const loc = r.headers.get("location");
     if (r.status >= 300 && r.status < 400 && loc) { cur = new URL(loc, cur).href; continue; }
     const html = r.status === 200 ? await r.text() : "";
+    // 転送がHTMLの中（meta refreshやJavaScript）に書かれている形でも、中のマップURLを使ってたどり直す
+    const emb = embeddedMapsUrl(html);
+    if (emb && emb !== cur) { cur = emb; continue; }
     return { finalUrl: cur, html };
   }
   return { finalUrl: cur, html: "" };
+}
+
+function embeddedMapsUrl(html) {
+  if (!html) return "";
+  const t = html.replace(/\\u003d/gi, "=").replace(/\\u0026/gi, "&").replace(/\\x3d/gi, "=").replace(/\\x26/gi, "&").replace(/&amp;/g, "&").replace(/\\\//g, "/");
+  const m = t.match(/https?:\/\/(?:www\.)?google\.[a-z.]+\/maps\/[^"'\s<>\\]+|https?:\/\/maps\.google\.[a-z.]+\/?\?[^"'\s<>\\]+/i);
+  return m ? m[0] : "";
+}
+
+// 一時的な失敗（通信エラー・Google側の混雑）は1回だけやり直す
+async function withRetry(fn) {
+  try { return await fn(); }
+  catch (e) {
+    if (e.retryable || e instanceof TypeError) return await fn();
+    throw e;
+  }
 }
 
 function fromHtml(html) {
@@ -212,7 +231,9 @@ function placesError(r, j) {
     BILLING_DISABLED: "Google Cloudの請求先アカウントが有効になっていません",
     PERMISSION_DENIED: "このキーではPlaces APIを使う権限がありません（APIの有効化・キーの制限を確認してください）"
   }[reason];
-  return new Error(hint || j?.error?.message || `Places API ${r.status}`);
+  const err = new Error(hint || j?.error?.message || `Places API ${r.status}`);
+  err.retryable = r.status >= 500 || r.status === 429;
+  return err;
 }
 
 function mapPlace(p) {
@@ -249,7 +270,7 @@ async function handle(req, env) {
       return new Response(JSON.stringify({ ok: false, error: "GoogleマップのURLではありません" }), { status: 400, headers });
     }
 
-    const { finalUrl, html } = await resolve(link);
+    const { finalUrl, html, blocked } = await resolve(link);
     const info = { ...fromHtml(html), ...parseMapsUrl(finalUrl) };
     // 英数字だけの長い文字列（確認画面の識別子など）は店舗名として使わない
     if (info.name && /^[A-Za-z0-9_-]{25,}$/.test(info.name)) delete info.name;
@@ -259,10 +280,21 @@ async function handle(req, env) {
     const key = (env.GOOGLE_MAPS_API_KEY || "").trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
     if (key && (info.placeId || info.name || info.lat)) {
       try {
-        // 店舗IDがあればそれで直接、なければ店舗名（と座標）で探す
-        const found = info.placeId
-          ? await placeDetails(key, info.placeId)
-          : await placesLookup(key, info.rawQuery || (info.name ? [info.name, info.address].filter(Boolean).join(" ") : `${info.lat},${info.lng}`), info.lat, info.lng, info.cid);
+        // 店舗IDがあればそれで直接。なければ、見つかるまで ①リンクの検索語そのまま ②店名＋住所 ③店名だけ ④座標 の順に探す
+        let found = {};
+        if (info.placeId) found = await withRetry(() => placeDetails(key, info.placeId));
+        if (!found.name) {
+          const tries = [...new Set([
+            info.rawQuery,
+            info.name ? [info.name, info.address].filter(Boolean).join(" ") : "",
+            info.name,
+            info.lat && info.lng ? `${info.lat},${info.lng}` : ""
+          ].filter(Boolean))];
+          for (const q of tries) {
+            found = await withRetry(() => placesLookup(key, q, info.lat, info.lng, info.cid));
+            if (found.name) break;
+          }
+        }
         Object.assign(info, Object.fromEntries(Object.entries(found).filter(([, v]) => v)));
       }
       catch (e) {
@@ -326,7 +358,7 @@ async function handle(req, env) {
     const cidMsg = "このリンク（cid=…形式）は店舗を特定できません。Googleマップの「共有」→「リンクをコピー」で出るリンクを使ってください";
     const cidOnly = !!info.cidOnly;
     delete info.placeId; delete info.rawQuery; delete info.cid; delete info.cidOnly;
-    return new Response(JSON.stringify({ ok: found, ...info, finalUrl, notes, error: found ? "" : (cidOnly ? cidMsg : "このリンクから店舗の情報を読み取れませんでした") }), { status: 200, headers });
+    return new Response(JSON.stringify({ ok: found, ...info, finalUrl, notes, error: found ? "" : (cidOnly ? cidMsg : blocked ? "Googleの確認画面に回されて読み取れませんでした。少し時間をおいてもう一度試してください" : "このリンクから店舗の情報を読み取れませんでした") }), { status: 200, headers });
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: "読み取り中にエラーが起きました：" + e.message }), { status: 200, headers });
   }

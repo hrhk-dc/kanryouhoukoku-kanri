@@ -1149,7 +1149,11 @@ $("#cancelVisitEdit").addEventListener("click", resetVisitForm);
 const lookupCache = new Map();
 async function mapsLookup(url) {
   if (lookupCache.has(url)) return lookupCache.get(url);
-  const r = await fetch(`/api/maps-info?url=${encodeURIComponent(url)}`);
+  // 通信の一時的な失敗（圏外・混雑）は1回だけ自動でやり直す
+  const call = () => fetch(`/api/maps-info?url=${encodeURIComponent(url)}`);
+  let r;
+  try { r = await call(); } catch { await new Promise((res) => setTimeout(res, 800)); r = await call(); }
+  if (r.status >= 500) { await new Promise((res) => setTimeout(res, 800)); r = await call(); }
   if (!r.ok && r.status !== 400) throw Object.assign(new Error(`読み取りサービスに接続できません（${r.status}）`), { code: r.status === 404 ? "lookup-missing" : "unavailable" });
   const j = await r.json();
   if (j.ok) lookupCache.set(url, j);
