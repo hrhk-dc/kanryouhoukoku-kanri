@@ -404,3 +404,6 @@ select { appearance: none; -webkit-appearance: none; padding-right: 34px; backgr
 .auth { margin-top: 32px; }
 .topbar { position: static; }
 .topbar-actions .btn.ghost { background: #fff; box-shadow: 0 2px 6px rgba(24,34,56,.06); }
+
+/* 報告一覧：店舗名の隣の業種 */
+.report-title .tag { font-size: 12px; font-weight: 600; margin-left: 6px; vertical-align: middle; }

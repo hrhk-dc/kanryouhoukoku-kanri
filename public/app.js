@@ -56,7 +56,8 @@ const FORMATS = {
       { id: "receivedAt", label: "受付日時", type: "datetime", required: false },
       { id: "result", label: "結果", type: "select", required: true, options: ["成約", "検討中", "不在", "断り"] },
       { id: "demoUrl", label: "デモサイトURL", type: "url", required: false },
-      { id: "wealth", label: "お客様の資力（お金のあるなし：1=少ない 〜 10=とても多い）", type: "select", required: false, options: ["1","2","3","4","5","6","7","8","9","10"] },
+      { id: "wealth", label: "お客様の資金力（お金のあるなし：1=少ない 〜 10=とても多い）", type: "select", required: false, options: ["1","2","3","4","5","6","7","8","9","10"] },
+      { id: "explainTime", label: "説明時間（分）", type: "number", required: false },
       { id: "memo", label: "メモ", type: "textarea", required: false }
     ]
   },
@@ -439,7 +440,7 @@ function subscribe() {
     unsubs.push(onSnapshot(doc(db, "settings", def.doc), (snap) => {
       const data = snap.exists() ? snap.data() : null;
       formats[key] = data && Array.isArray(data.fields) && data.fields.length ? data.fields : clone(def.fields);
-      if (key === "report") { reportPhotoAdded = !!(data && data.photoFieldAdded); reportWealthAdded = !!(data && data.wealthFieldAdded); }
+      if (key === "report") { reportPhotoAdded = !!(data && data.photoFieldAdded); reportWealthAdded = !!(data && data.wealthFieldAdded); reportExplainAdded = !!(data && data.explainTimeFieldAdded); }
       normalizeFormat(key);
       if (key === "visit") { visitAutoAdded = !!(data && data.autoFieldsAdded); addAutoVisitFields(); }
       if (key === "nextAction") {
@@ -496,7 +497,17 @@ function addAutoVisitFields() {
 
 let reportPhotoAdded = false;
 let reportWealthAdded = false;
+let reportExplainAdded = false;
+/* 説明時間の項目（項目名に「説明時間」を含むもの）。値は「分」 */
+const explainItemOf = (items) => (items || []).find((i) => (i.id === "explainTime" || /説明時間/.test(i.label || "")) && i.value);
 function normalizeFormat(key) {
+  if (key === "report") { // 「資力」は「資金力」に名前を変更
+    formats.report.forEach((f) => { if (f.id === "wealth" && /資力/.test(f.label || "")) f.label = f.label.replace(/資力/g, "資金力"); });
+  }
+  if (key === "report" && !reportExplainAdded && !formats.report.some((f) => f.id === "explainTime" || /説明時間/.test(f.label || ""))) {
+    const at = formats.report.findIndex((f) => f.id === "wealth");
+    formats.report.splice(at >= 0 ? at + 1 : formats.report.length, 0, clone(FORMATS.report.fields.find((f) => f.id === "explainTime")));
+  }
   if (key === "visit") { // 業種は「飲食店・美容院…」から選ぶ形に
     const c = formats.visit.find((f) => f.id === "category" || /^業種$/.test(f.label || ""));
     if (c) { c.type = "select"; c.options = [...INDUSTRIES]; }
@@ -965,12 +976,16 @@ function renderList() {
       caseNo && `<span class="case-no">${esc(caseNo)}</span>`,
       (() => { const v = visitOfReport(r); const ad = v ? addressOf(v) : ""; return ad && `🏠 ${esc(ad)}`; })(),
       itemVal(r.items, "visitTo") && itemVal(r.items, "visitTo") !== title && `📍 ${esc(itemVal(r.items, "visitTo"))}`,
-      itemVal(r.items, "wealth") && `💰 資力 ${esc(itemVal(r.items, "wealth"))}/10`,
+      itemVal(r.items, "wealth") && `💰 資金力 ${esc(itemVal(r.items, "wealth"))}/10`,
+      (() => { const e = explainItemOf(r.items); return e && `⏱ 説明時間 ${esc(e.value)}${/^\d+(\.\d+)?$/.test(String(e.value).trim()) ? "分" : ""}`; })(),
       itemVal(r.items, "personName") && `👤 ${esc(itemVal(r.items, "personName"))}`,
       firstOfType(r.items, ["datetime"]) && `🕒 受付 ${esc(firstOfType(r.items, ["datetime"]).replace("T", " "))}`
     ].filter(Boolean);
-    const shown = ["caseNo", "caseName", "result", "visitTo", "personName", "wealth"];
-    const rest = (r.items || []).filter((i) => !shown.includes(i.id));
+    const shown = ["caseNo", "caseName", "result", "visitTo", "personName", "wealth", "explainTime"];
+    const explainItem = explainItemOf(r.items);
+    const rest = (r.items || []).filter((i) => !shown.includes(i.id) && i !== explainItem);
+    // 店舗名の隣に業種（訪問リストの案件番号からたどる）
+    const industry = (() => { const v = visitOfReport(r); return v ? industryOf(v) : ""; })();
 
     const na = naItemsOf(r);
     const naDate = firstOfType(na, ["date", "datetime"]).slice(0, 10);
@@ -1002,7 +1017,7 @@ function renderList() {
 
     return `<article class="card report-card">
       <div class="report-head">
-        <p class="report-title">${esc(title)}</p>
+        <p class="report-title">${esc(title)}${industry ? ` <span class="tag cat">${esc(industry)}</span>` : ""}</p>
         ${result ? `<span class="badge ${RESULT_CLASS[result] || ""}">${esc(result)}</span>` : ""}
       </div>
       ${subs.length ? `<p class="report-sub">${subs.join("<span class=\"sep\">·</span>")}</p>` : ""}
@@ -1761,7 +1776,7 @@ $("#saveFormat").addEventListener("click", async () => {
     };
     if (adminSection === "nextAction") data.sectionRequired = draftNaRequired;
     if (adminSection === "visit") data.autoFieldsAdded = true;
-    if (adminSection === "report") { data.photoFieldAdded = true; data.wealthFieldAdded = true; }
+    if (adminSection === "report") { data.photoFieldAdded = true; data.wealthFieldAdded = true; data.explainTimeFieldAdded = true; }
     await setDoc(doc(db, "settings", FORMATS[adminSection].doc), data);
     toast(`「${FORMATS[adminSection].title}」のフォーマットを保存しました`);
   } catch (err) {
