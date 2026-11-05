@@ -44,7 +44,9 @@ function parseMapsUrl(u) {
   const dec = (() => { try { return decodeURIComponent(u); } catch { return u; } })();
   const pin = dec.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
   const at = dec.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-  const q = url.pathname.startsWith("/maps") ? (url.searchParams.get("q") || url.searchParams.get("query") || "") : "";
+  // maps.google.com/?q=… のように、パスが /maps でなくても q が入っているリンクがある（短縮リンクの転送先など）
+  const mapsHost = /^maps\.google\.[a-z.]+$/i.test(url.hostname);
+  const q = (url.pathname.startsWith("/maps") || mapsHost) ? (url.searchParams.get("q") || url.searchParams.get("query") || "") : "";
   const qll = q.match(/^\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
   const ll = pin || at || qll;
   if (ll) { out.lat = parseFloat(ll[1]); out.lng = parseFloat(ll[2]); }
@@ -54,7 +56,12 @@ function parseMapsUrl(u) {
   if (pid) out.placeId = pid.trim();
   // cid=数字 形式のリンク（Places APIでは引けない）
   if (!out.placeId && url.searchParams.get("cid")) out.cidOnly = true;
-  if (!out.name && q && !qll && !/^\s*place_id:/i.test(q)) out.name = q.trim();
+  if (!out.name && q && !qll && !/^\s*place_id:/i.test(q)) {
+    // 「〒335-0022 埼玉県戸田市… 店舗名」のように、郵便番号・住所のあとに店舗名が続く形
+    const m = q.trim().match(/^(?:〒?\s*\d{3}-?\d{4}[\s　]+)?((?:北海道|東京都|京都府|大阪府|.{2,3}?県)[^\s　]*)[\s　]+(.+)$/);
+    if (m) { out.address = m[1].trim(); out.name = m[2].trim(); }
+    else out.name = q.trim();
+  }
   return out;
 }
 
@@ -247,7 +254,7 @@ async function handle(req, env) {
         // 店舗IDがあればそれで直接、なければ店舗名（と座標）で探す
         const found = info.placeId
           ? await placeDetails(key, info.placeId)
-          : await placesLookup(key, info.name || `${info.lat},${info.lng}`, info.lat, info.lng);
+          : await placesLookup(key, info.name ? [info.name, info.address].filter(Boolean).join(" ") : `${info.lat},${info.lng}`, info.lat, info.lng);
         Object.assign(info, Object.fromEntries(Object.entries(found).filter(([, v]) => v)));
       }
       catch (e) {
