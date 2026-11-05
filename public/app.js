@@ -1399,6 +1399,7 @@ $("#visitForm").addEventListener("submit", async (e) => {
       });
       if (prevV) historyUpdate("visits", prevV, ["visitDate", "items"], { visitDate, items: filled[0].items }, "訪問先の編集");
       toast("更新しました");
+      if (prevV?.caseNo && itemVal(prevV.items, "mapsUrl") !== itemVal(filled[0].items, "mapsUrl")) queueDemos([{ caseNo: prevV.caseNo, visitDate, items: filled[0].items }]);
     } else {
       // 案件番号は共通カウンターから連番で取る（同時に保存しても番号が被らない）
       const counterRef = doc(db, "counters", "caseNo");
@@ -1420,6 +1421,7 @@ $("#visitForm").addEventListener("submit", async (e) => {
         });
       });
       toast(`${filled.length}件保存しました（${nos[0]}${nos.length > 1 ? `〜${nos[nos.length - 1]}` : ""}）`);
+      queueDemos(filled.map((r, n) => ({ caseNo: nos[n], visitDate, items: r.items })));
       store.del("visits");
     }
     $("#visitFilterDate").value = visitDate;
@@ -2498,6 +2500,23 @@ function renderAllExtras() {
 
 
 /* ---------- Claude Codeで登録されたデモサイトURL（Netlify側に保存）を訪問先に付ける ---------- */
+// 保存した訪問先のGoogleマップのリンクを、デモサイト作成の依頼として預ける（Claude Codeが定期的に受け取って作る）
+async function queueDemos(list) {
+  try {
+    const items = list.map(({ caseNo, visitDate, items }) => {
+      const o = { caseNo, visitDate };
+      for (const i of items || []) if (i.value) o[i.id] = i.value;
+      return o;
+    }).filter((o) => o.caseNo && o.mapsUrl);
+    if (!items.length) return;
+    const t = await currentUser.getIdToken();
+    await fetch("/api/demo-queue", {
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` },
+      body: JSON.stringify({ items })
+    });
+  } catch (e) { console.warn("デモ作成の依頼に失敗しました", e); }
+}
+
 let demoUrls = {};
 let demoTimer = null;
 function applyDemoUrls() {

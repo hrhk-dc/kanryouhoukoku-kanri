@@ -17,7 +17,7 @@ const json = (status, body) => new Response(JSON.stringify(body), {
 });
 
 // 文字列を比べるのにかかる時間から合言葉を推測されないよう、常に全文字を比べる
-function sameText(a, b) {
+export function sameText(a, b) {
   const x = new TextEncoder().encode(a), y = new TextEncoder().encode(b);
   let diff = x.length ^ y.length;
   for (let i = 0; i < Math.max(x.length, y.length); i++) diff |= (x[i] || 0) ^ (y[i] || 0);
@@ -25,7 +25,7 @@ function sameText(a, b) {
 }
 
 // ログイン中のメンバーかどうかを、本人のIDトークンで確かめる
-async function checkMember(idToken) {
+export async function checkMember(idToken) {
   const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken })
   });
@@ -51,7 +51,7 @@ export async function onRequestGet({ request, env }) {
     let cursor;
     do {
       const page = await env.DEMO_URLS.list({ cursor });
-      await Promise.all(page.keys.map(async ({ name }) => {
+      await Promise.all(page.keys.filter(({ name }) => !name.startsWith("queue:")).map(async ({ name }) => {
         const v = await env.DEMO_URLS.get(name, "json");
         if (v?.url) items[name] = v;
       }));
@@ -78,7 +78,9 @@ export async function onRequestPost({ request, env }) {
     if (body.delete === true) { await env.DEMO_URLS.delete(caseNo); return json(200, { ok: true, caseNo, deleted: true }); }
     if (!/^https:\/\/[^\s"'<>]+$/.test(url)) return json(400, { ok: false, error: "URLは https:// から始めてください" });
 
-    await env.DEMO_URLS.put(caseNo, JSON.stringify({ url, at: new Date().toISOString() }));
+    const mapsUrl = /^https:\/\/[^\s"'<>]+$/.test(String(body.mapsUrl || "")) ? String(body.mapsUrl) : undefined;
+    await env.DEMO_URLS.put(caseNo, JSON.stringify({ url, mapsUrl, at: new Date().toISOString() }));
+    await env.DEMO_URLS.delete("queue:" + caseNo); // 依頼の待ち行列から外す
     return json(200, { ok: true, caseNo, url, message: `案件 ${caseNo} にデモサイトURLを登録しました` });
   } catch (e) {
     return json(500, { ok: false, error: "処理中にエラーが起きました：" + e.message });

@@ -13,6 +13,7 @@
 | `firestore.rules` | データベースの権限ルール（変更したら Firebase コンソールで公開が必要） |
 | `functions/api/maps-info.js` | Googleマップのリンクから店舗情報を読み取る |
 | `functions/api/demo-url.js` | Claude Code で作ったデモサイトURLを案件に登録する（Cloudflare KV に保存） |
+| `functions/api/demo-queue.js` | 訪問リストに保存されたマップのリンクを、デモ作成の依頼として預かる |
 | `public/manifest.webmanifest` / `public/sw.js` / `public/icons/` | ホーム画面アプリ化 |
 | `public/_headers` | 公開時のヘッダー設定（セキュリティ・キャッシュ） |
 | `管理者向けメモ.md` | メンバー許可・APIキー・連携の設定手順 |
