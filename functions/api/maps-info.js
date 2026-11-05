@@ -62,6 +62,11 @@ function parseMapsUrl(u) {
     if (m) { out.address = m[1].trim(); out.name = m[2].trim(); }
     else out.name = q.trim();
   }
+  // q の中身はそのまま検索に使える（住所と店名がどの順に並んでいてもGoogleが解釈してくれる）
+  if (q && !qll && !/^\s*place_id:/i.test(q)) out.rawQuery = q.trim();
+  // リンク内の店舗識別子（ftid=0x…:0x… ／ !1s0x…:0x…）。後ろ半分を10進にするとGoogleのcidと一致する
+  const fid = (dec.match(/(?:ftid=|!1s)0x[0-9a-f]+:0x([0-9a-f]+)/i) || [])[1];
+  if (fid) { try { out.cid = BigInt("0x" + fid).toString(); } catch { /* 無視 */ } }
   return out;
 }
 
@@ -156,8 +161,8 @@ async function siteText(url) {
 const GENERIC = new Set(["point_of_interest", "establishment", "store", "service", "health", "finance", "general_contractor_", "premise", "political", "locality", "food_store"]);
 const usefulRaw = (raw) => String(raw || "").split(/\s+/).filter((w) => w && !GENERIC.has(w)).join(" ");
 
-async function placesLookup(key, name, lat, lng) {
-  const body = { textQuery: name, languageCode: "ja", regionCode: "JP" };
+async function placesLookup(key, name, lat, lng, cid = "") {
+  const body = { textQuery: name, languageCode: "ja", regionCode: "JP", pageSize: 5 };
   if (lat && lng) body.locationBias = { circle: { center: { latitude: lat, longitude: lng }, radius: 300 } };
   const r = await fetch("https://places.googleapis.com/v1/places:searchText", {
     method: "POST",
@@ -167,14 +172,17 @@ async function placesLookup(key, name, lat, lng) {
       "X-Goog-FieldMask": [
         "places.displayName", "places.formattedAddress", "places.nationalPhoneNumber",
         "places.regularOpeningHours.weekdayDescriptions", "places.primaryTypeDisplayName", "places.primaryType", "places.types",
-        "places.rating", "places.userRatingCount", "places.websiteUri", "places.location", "places.addressComponents", "places.editorialSummary"
+        "places.rating", "places.userRatingCount", "places.websiteUri", "places.location", "places.addressComponents", "places.editorialSummary", "places.googleMapsUri"
       ].join(",")
     },
     body: JSON.stringify(body)
   });
   const j = await r.json();
   if (!r.ok) throw placesError(r, j);
-  return mapPlace(j.places?.[0]);
+  const list = j.places || [];
+  // リンクの店舗識別子（cid）と同じ店があればそれを採用（同じ名前の別店舗を取り違えない）。なければ先頭
+  const same = cid ? list.find((x) => new RegExp(`[?&]cid=${cid}(?:&|$)`).test(x.googleMapsUri || "")) : null;
+  return mapPlace(same || list[0]);
 }
 
 // 店舗ID（place_id）から直接取得する（place_id形式のリンク用）
@@ -254,7 +262,7 @@ async function handle(req, env) {
         // 店舗IDがあればそれで直接、なければ店舗名（と座標）で探す
         const found = info.placeId
           ? await placeDetails(key, info.placeId)
-          : await placesLookup(key, info.name ? [info.name, info.address].filter(Boolean).join(" ") : `${info.lat},${info.lng}`, info.lat, info.lng);
+          : await placesLookup(key, info.rawQuery || (info.name ? [info.name, info.address].filter(Boolean).join(" ") : `${info.lat},${info.lng}`), info.lat, info.lng, info.cid);
         Object.assign(info, Object.fromEntries(Object.entries(found).filter(([, v]) => v)));
       }
       catch (e) {
@@ -316,8 +324,9 @@ async function handle(req, env) {
 
     const found = !!(info.name || info.area);
     const cidMsg = "このリンク（cid=…形式）は店舗を特定できません。Googleマップの「共有」→「リンクをコピー」で出るリンクを使ってください";
-    delete info.placeId;
-    return new Response(JSON.stringify({ ok: found, ...info, finalUrl, notes, error: found ? "" : (info.cidOnly ? cidMsg : "このリンクから店舗の情報を読み取れませんでした") }), { status: 200, headers });
+    const cidOnly = !!info.cidOnly;
+    delete info.placeId; delete info.rawQuery; delete info.cid; delete info.cidOnly;
+    return new Response(JSON.stringify({ ok: found, ...info, finalUrl, notes, error: found ? "" : (cidOnly ? cidMsg : "このリンクから店舗の情報を読み取れませんでした") }), { status: 200, headers });
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: "読み取り中にエラーが起きました：" + e.message }), { status: 200, headers });
   }
