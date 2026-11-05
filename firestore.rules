@@ -65,7 +65,7 @@ service cloud.firestore {
     // 完了報告：次回アクションは必須
     match /reports/{reportId} {
       allow read: if isMember();
-      allow create: if isMember() && createdBySelf()
+      allow create: if isMember() && (createdBySelf() || isAdmin())
         && request.resource.data.nextActionItems is list
         && request.resource.data.nextActionItems.size() > 0;
       allow update: if isMember() && isOwnerOrAdmin() && authorUnchanged()
@@ -77,7 +77,7 @@ service cloud.firestore {
     // 翌日訪問リスト（案件番号とデモURLはアプリからは変更できない）
     match /visits/{visitId} {
       allow read: if isMember();
-      allow create: if isMember() && createdBySelf()
+      allow create: if isMember() && (createdBySelf() || isAdmin())
         && request.resource.data.visitDate is string
         && request.resource.data.items is list
         && request.resource.data.caseNo is string
