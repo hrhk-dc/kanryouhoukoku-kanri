@@ -1233,12 +1233,12 @@ $("#visitRows").addEventListener("change", (e) => {
 });
 
 /* リンクをまとめて貼り付け → 1リンク1行で作って読み取る */
-$("#bulkAdd").addEventListener("click", async () => {
+async function runBulkAdd() {
   const links = splitLinks($("#bulkLinks").value);
   if (!links.length) { toast("Googleマップのリンクが見つかりませんでした"); return; }
   $("#bulkLinks").value = "";
   await addLinksAsRows(links);
-});
+}
 // 「貼り付け」ボタン：コピーしてあるリンクをそのまま取り込んで読み取る
 $("#bulkPaste").addEventListener("click", async () => {
   const box = $("#bulkLinks");
@@ -1247,20 +1247,22 @@ $("#bulkPaste").addEventListener("click", async () => {
     toast("このブラウザではボタンで貼り付けできません。入力欄を長押し（またはCtrl+V）して貼り付けてください");
     return;
   }
+  let text = "";
   try {
-    const text = (await navigator.clipboard.readText()) || "";
-    if (!text.trim()) { toast("コピーされたものがありません。先にGoogleマップのリンクをコピーしてください"); return; }
-    if (!splitLinks(text).length) { toast("コピーした内容にGoogleマップのリンクが見つかりませんでした"); return; }
-    box.value = box.value.trim() ? `${box.value.trim()}\n${text}` : text;
-    $("#bulkAdd").click();
+    text = (await navigator.clipboard.readText()) || "";
   } catch {
     box.focus();
     toast("貼り付けが許可されませんでした。入力欄を長押し（またはCtrl+V）して貼り付けてください");
+    return;
   }
+  if (!text.trim()) { toast("コピーされたものがありません。先にGoogleマップのリンクをコピーしてください"); return; }
+  if (!splitLinks(text).length) { toast("コピーした内容にGoogleマップのリンクが見つかりませんでした"); return; }
+  box.value = box.value.trim() ? `${box.value.trim()}\n${text}` : text;
+  await runBulkAdd();
 });
 // 貼り付けた瞬間に自動で読み取る（ボタンを押さなくてもOK）
 $("#bulkLinks").addEventListener("paste", () => setTimeout(() => {
-  if (splitLinks($("#bulkLinks").value).length) $("#bulkAdd").click();
+  if (splitLinks($("#bulkLinks").value).length) runBulkAdd();
 }, 0));
 
 $("#visitForm").addEventListener("submit", async (e) => {
