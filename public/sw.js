@@ -1,7 +1,7 @@
 // DC 完了報告：ホーム画面アプリ用のサービスワーカー
 // 画面のファイルは「ネット優先・つながらない時だけ保存版」を使う（更新がすぐ反映されるように）
 // 報告データ（Firebase）は保存しない
-const CACHE = "dc-report-v29";
+const CACHE = "dc-report-v30";
 const SHELL = [
   "/", "/index.html", "/style.css", "/app.js", "/firebase-config.js",
   "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/icon.svg", "/icons/apple-touch-icon.png"
