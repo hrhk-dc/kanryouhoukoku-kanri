@@ -95,6 +95,41 @@ const FORMATS = {
 /* ---------- 小道具 ---------- */
 const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+/* ---------- アイコン（絵文字は使わない。線のアイコンで統一。DESIGN.md 参照） ---------- */
+const ICON_PATHS = {
+  user: '<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1.2-3.6 4-5.4 7.5-5.4s6.3 1.8 7.5 5.4"/>',
+  users: '<circle cx="9" cy="8.5" r="3.2"/><path d="M2.8 19.5c1-3 3.3-4.6 6.2-4.6s5.2 1.6 6.2 4.6"/><path d="M15.5 5.6a3 3 0 010 5.8M17.6 14.9c1.8.5 3 1.9 3.6 4"/>',
+  paste: '<rect x="5" y="4.5" width="14" height="16" rx="3"/><path d="M9 4.5V3.8c0-.7.5-1.3 1.2-1.3h3.6c.7 0 1.2.6 1.2 1.3v.7M8.5 11h7M8.5 15h4.5"/>',
+  camera: '<path d="M4 8.5c0-1.1.9-2 2-2h1.8l1.4-2h5.6l1.4 2H18c1.1 0 2 .9 2 2V18c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2z"/><circle cx="12" cy="13" r="3.4"/>',
+  trophy: '<path d="M8 4h8v5a4 4 0 01-8 0zM8 6H5v1.5A3 3 0 008 10.5M16 6h3v1.5a3 3 0 01-3 3M12 13v3.5M8.5 20h7M10 16.5h4"/>',
+  home: '<path d="M4 10.5L12 4l8 6.5V19a1 1 0 01-1 1h-4.5v-5.5h-5V20H5a1 1 0 01-1-1z"/>',
+  pin: '<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0113 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>',
+  wallet: '<rect x="3.5" y="6" width="17" height="13" rx="3"/><path d="M3.5 10h17M15.5 14.5h1.5"/>',
+  timer: '<circle cx="12" cy="13.5" r="7"/><path d="M12 10v3.5l2.2 1.6M10 2.8h4"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  refresh: '<path d="M19.5 12a7.5 7.5 0 01-13 5.1M4.5 12a7.5 7.5 0 0113-5.1"/><path d="M17.5 3.5v3.6h-3.6M6.5 20.5v-3.6h3.6"/>',
+  calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  tag: '<path d="M3.5 12.2V5a1.5 1.5 0 011.5-1.5h7.2l8.3 8.3a1.5 1.5 0 010 2.1l-7.1 7.1a1.5 1.5 0 01-2.1 0z"/><circle cx="8" cy="8" r="1.3"/>',
+  globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.3 2.4 3.4 5.2 3.4 8.5s-1.1 6.1-3.4 8.5c-2.3-2.4-3.4-5.2-3.4-8.5s1.1-6.1 3.4-8.5z"/>',
+  route: '<circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8.2 18H16a3 3 0 000-6H8a3 3 0 010-6h7.8"/>',
+  alert: '<path d="M12 4l9 15.5H3z"/><path d="M12 10v4M12 17v.01"/>',
+  bell: '<path d="M6 16.5V11a6 6 0 0112 0v5.5l1.5 2h-15zM10 20.5a2 2 0 004 0"/>',
+  checkCircle: '<circle cx="12" cy="12" r="8.5"/><path d="M8.3 12.2l2.5 2.5 4.9-5"/>',
+  undo: '<path d="M8.5 6.5L4.5 10.5l4 4"/><path d="M4.5 10.5h10a5 5 0 010 10H11"/>',
+  redo: '<path d="M15.5 6.5l4 4-4 4"/><path d="M19.5 10.5h-10a5 5 0 000 10H13"/>',
+  left: '<path d="M14.5 6l-6 6 6 6"/>',
+  right: '<path d="M9.5 6l6 6-6 6"/>',
+  up: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  down: '<path d="M12 5v14M6 13l6 6 6-6"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  map: '<path d="M9 4.5L3.5 6.5v13L9 17.5l6 2 5.5-2v-13L15 6.5z"/><path d="M9 4.5v13M15 6.5v13"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="3"/><path d="M16 8V6.5A2.5 2.5 0 0013.5 4h-7A2.5 2.5 0 004 6.5v7A2.5 2.5 0 006.5 16H8"/>',
+  link: '<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>',
+  logout: '<path d="M14 4.5h3.5a2 2 0 012 2v11a2 2 0 01-2 2H14M10 16l4-4-4-4M14 12H4"/>',
+  download: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>'
+};
+const ic = (name, cls = "") => `<svg class="ic${cls ? " " + cls : ""}" viewBox="0 0 24 24" aria-hidden="true">${ICON_PATHS[name] || ""}</svg>`;
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const pad = (n) => String(n).padStart(2, "0");
 const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -346,7 +381,7 @@ function errorReport(err, action) {
 function errorHtml(err, action) {
   const e = explainError(err);
   lastErrorText = errorReport(err, action);
-  return `<div class="err-title">⚠ ${esc(action)}ができませんでした</div>
+  return `<div class="err-title">${ic("alert")}${esc(action)}ができませんでした</div>
     <div class="err-row"><b>原因</b>${esc(e.cause)}</div>
     <div class="err-row"><b>対処</b>${esc(e.fix)}</div>
     <div class="err-foot"><span class="err-code">コード：${esc(e.code)}</span>
@@ -601,7 +636,7 @@ function subscribeMe() {
   unsubs.push(onSnapshot(doc(db, "users", currentUser.uid), (snap) => {
     myName = (snap.exists() && snap.data().name) || "";
     myOrder = (snap.exists() && Array.isArray(snap.data().visitOrder)) ? snap.data().visitOrder : [];
-    $("#myNameLabel").textContent = myName ? `👤 ${myName}` : "👤 名前を設定";
+    $("#myNameLabel").innerHTML = ic("user") + `<span>${esc(myName || "名前を設定")}</span>`;
     renderVisitList();
     renderList();
     renderAllExtras();
@@ -690,7 +725,7 @@ function fieldInput(f, value = "") {
       const ids = String(value || "").split(",").filter(Boolean);
       return `<span class="photo-field"><input type="hidden" ${attrs} value="${esc(ids.join(","))}">
         <span class="ph-list">${photoThumbs(ids, true)}</span>
-        <span class="btn small ph-add">📷 写真を追加<input type="file" accept="image/*" multiple data-photo-input></span>
+        <span class="btn small ph-add">${ic("camera")}写真を追加<input type="file" accept="image/*" multiple data-photo-input></span>
         <span class="ph-status hint"></span></span>`;
     }
     default: return `<input type="text" ${attrs} value="${esc(value)}">`;
@@ -740,7 +775,7 @@ function fillFromCaseNo(input) {
     const f = formats.nextAction.find((x) => x.id === el.dataset.fieldId);
     if (f?.type === "maps") put(el, maps);
   });
-  if (hit) hit.textContent = `✓ ${fmtDateJa(v.visitDate)}訪問予定「${shop}」の情報を${filled ? `${filled}項目入れました` : "確認しました（空欄はありません）"}`;
+  if (hit) hit.textContent = `${fmtDateJa(v.visitDate)}訪問予定「${shop}」の情報を${filled ? `${filled}項目入れました` : "確認しました（空欄はありません）"}`;
 }
 document.addEventListener("change", (e) => {
   const el = e.target.closest('#reportCases [data-field-id]');
@@ -1028,7 +1063,7 @@ function renderList() {
   const breakdown = Object.entries(byResult).filter(([k]) => k !== "成約").map(([k, c]) => `${esc(k)} ${c}件`).join("・");
   const who = authF === "me" ? "自分" : authF.startsWith("p:") ? `${authF.slice(2)}さん` : "";
   $("#listCount").innerHTML = `<span class="lc-total">${who ? `${esc(who)}：` : ""}${filtered ? `${list.length}件（全${reports.length}件中）` : `全${reports.length}件`}</span>` +
-    (list.length ? `<span class="lc-won">🎉 成約 <b>${won}件</b>（成約率 ${rate}%）</span>` : "") +
+    (list.length ? `<span class="lc-won">${ic("trophy")}成約 <b>${won}件</b>（成約率 ${rate}%）</span>` : "") +
     (breakdown ? `<span class="lc-rest">${breakdown}</span>` : "");
   $("#clearFilters").classList.toggle("hidden", !filtered && sort === "new");
 
@@ -1043,12 +1078,12 @@ function renderList() {
     const caseNo = firstOfType(r.items, ["caseNo"]);
     const subs = [
       caseNo && `<span class="case-no">${esc(caseNo)}</span>`,
-      (() => { const v = visitOfReport(r); const ad = v ? addressOf(v) : ""; return ad && `🏠 ${esc(ad)}`; })(),
-      itemVal(r.items, "visitTo") && itemVal(r.items, "visitTo") !== title && `📍 ${esc(itemVal(r.items, "visitTo"))}`,
-      itemVal(r.items, "wealth") && `💰 資金力 ${esc(itemVal(r.items, "wealth"))}/10`,
-      (() => { const e = explainItemOf(r.items); return e && `⏱ 説明時間 ${esc(e.value)}${/^\d+(\.\d+)?$/.test(String(e.value).trim()) ? "分" : ""}`; })(),
-      itemVal(r.items, "personName") && `👤 ${esc(itemVal(r.items, "personName"))}`,
-      firstOfType(r.items, ["datetime"]) && `🕒 受付 ${esc(firstOfType(r.items, ["datetime"]).replace("T", " "))}`
+      (() => { const v = visitOfReport(r); const ad = v ? addressOf(v) : ""; return ad && `${ic("home")}${esc(ad)}`; })(),
+      itemVal(r.items, "visitTo") && itemVal(r.items, "visitTo") !== title && `${ic("pin")}${esc(itemVal(r.items, "visitTo"))}`,
+      itemVal(r.items, "wealth") && `${ic("wallet")}資金力 ${esc(itemVal(r.items, "wealth"))}/10`,
+      (() => { const e = explainItemOf(r.items); return e && `${ic("timer")}説明時間 ${esc(e.value)}${/^\d+(\.\d+)?$/.test(String(e.value).trim()) ? "分" : ""}`; })(),
+      itemVal(r.items, "personName") && `${ic("user")}${esc(itemVal(r.items, "personName"))}`,
+      firstOfType(r.items, ["datetime"]) && `${ic("clock")}受付 ${esc(firstOfType(r.items, ["datetime"]).replace("T", " "))}`
     ].filter(Boolean);
     const shown = ["caseNo", "caseName", "result", "visitTo", "personName", "wealth", "explainTime"];
     const explainItem = explainItemOf(r.items);
@@ -1155,7 +1190,7 @@ function renderVisitRows() {
       ${fieldsHtml(linkFields, vals)}
       ${timeFields.length ? `<div class="row-when">${fieldsHtml(timeFields, vals)}</div>` : ""}
       <div class="row-summary"></div>
-      <div class="btn-row" style="margin:4px 0"><button class="btn small" type="button" data-relookup="${idx}">🔄 マップから読み取り直す（店舗名・県・市・区・業種・営業時間を上書き）</button></div>
+      <div class="btn-row" style="margin:4px 0"><button class="btn small" type="button" data-relookup="${idx}">${ic("refresh")}マップから読み取り直す（店舗名・県・市・区・業種・営業時間を上書き）</button></div>
       <details class="row-more"${editingVisitId || !linkFields.length ? " open" : ""}>
         <summary>読み取った内容を確認・修正（店舗名・都道府県・市・区・業種・営業時間など）</summary>
         ${fieldsHtml(otherFields, vals, isAutoField)}
@@ -1273,7 +1308,7 @@ function updateRowSummary(row) {
   box.innerHTML = name || place ? `
     <div class="sum-name">${esc(name || "（店舗名なし）")}</div>
     <div class="tags">${parts.map(([k, x]) => `<span class="tag" title="${k}">${esc(x)}</span>`).join("") || (val("area") ? `<span class="tag">${esc(val("area"))}</span>` : "")}</div>
-    ${hours ? `<div class="sum-sub">🕒 営業時間：${esc(hours)}${val("hours").includes("\n") ? " ほか" : ""}</div>` : ""}` : "";
+    ${hours ? `<div class="sum-sub">${ic("clock")}営業時間：${esc(hours)}${val("hours").includes("\n") ? " ほか" : ""}</div>` : ""}` : "";
 }
 function setRowStatus(row, text, cls = "") {
   let s = row.querySelector(".lookup-status");
@@ -1299,7 +1334,7 @@ async function lookupRow(row, overwrite = false) {
     const what = [info.name, info.area, info.category && `業種：${info.category}${info.categorySource ? `（${info.categorySource}）` : ""}`].filter(Boolean).join("・");
     const note = (info.notes || []).join(" / ");
     const dup = duplicateNote(row, info);
-    setRowStatus(row, `✓ ${what || "読み取りました"}${n ? `（${n}項目を入力）` : "（空欄はありませんでした）"}${note ? `　※${note}` : ""}${dup ? `\n${dup}` : ""}`, dup ? "ok dup" : "ok");
+    setRowStatus(row, `${what || "読み取りました"}${n ? `（${n}項目を入力）` : "（空欄はありませんでした）"}${note ? `　※${note}` : ""}${dup ? `\n${dup}` : ""}`, dup ? "ok dup" : "ok");
     return info;
   } catch (err) {
     const why = err.code === "lookup-missing" ? "読み取り機能がまだサーバーに入っていません（管理者に連絡してください）" : explainError(err).cause;
@@ -1566,7 +1601,7 @@ function renderPersonCounts() {
   if (!base.length) { box.innerHTML = ""; return; }
   const dates = f ? [f] : [...new Set(base.map((v) => v.visitDate || ""))].sort().slice(0, 7);
   const cur = $("#visitPerson").value;
-  box.innerHTML = `<div class="pc-title">👥 担当者別の件数${f ? "" : "（日付ごと・直近7日分）"}</div>` + dates.map((d) => {
+  box.innerHTML = `<div class="pc-title">${ic("users")}担当者別の件数${f ? "" : "（日付ごと・直近7日分）"}</div>` + dates.map((d) => {
     const counts = {};
     base.filter((v) => (v.visitDate || "") === d).forEach((v) => { const n = personOf(v) || "担当者なし"; counts[n] = (counts[n] || 0) + 1; });
     const total0 = Object.values(counts).reduce((a, b) => a + b, 0);
@@ -1603,8 +1638,8 @@ function updateCaseNoList() {
 const TIME_HOURS = Array.from({ length: 18 }, (_, i) => i + 6); // 6時〜23時
 function timeSelectHtml(v, time) {
   const h = /^\d{1,2}:/.test(time) ? parseInt(time, 10) : null;
-  if (!canModify(v)) return h !== null ? `🕒 ${h}時` : "";
-  return `<label class="vtime">🕒 <select data-vtime="${esc(v.id)}" aria-label="訪問予定時刻">
+  if (!canModify(v)) return h !== null ? `<span class="vtime">${ic("clock")}${h}時</span>` : "";
+  return `<label class="vtime">${ic("clock")}<select data-vtime="${esc(v.id)}" aria-label="訪問予定時刻">
     <option value="">時間未定</option>${TIME_HOURS.map((x) => `<option value="${pad(x)}:00"${x === h ? " selected" : ""}>${x}時</option>`).join("")}
   </select></label>`;
 }
@@ -1691,15 +1726,15 @@ function renderVisitList() {
     const cat = industryOf(v);
     const hoursTxt = textOf(v, "hours");
     const when = [
-      !grouped && v.visitDate ? `📅 ${esc(fmtDateJa(v.visitDate))}` : "",
+      !grouped && v.visitDate ? `<span class="vdate">${ic("calendar")}${esc(fmtDateJa(v.visitDate))}</span>` : "",
       timeSelectHtml(v, time)
     ].filter(Boolean).join(" ");
     const tags = [["都道府県", pp.prefecture], ["市", pp.city], ["区", pp.ward]]
       .filter(([, val]) => val)
       .map(([k, val]) => `<span class="tag" title="${k}">${esc(val)}</span>`).join("") +
-      (cat ? `<span class="tag cat" title="業種">🏷 ${esc(cat)}</span>` : `<span class="tag none" title="業種">🏷 業種：未取得</span>${canModify(v) ? `<button class="btn small" type="button" data-fillcat="${esc(v.id)}">業種を自動入力</button>` : ""}`);
-    const hoursHtml = hoursTxt ? `<p class="visit-hours">🕒 営業時間：${esc(hoursTxt.split("\n")[0])}${hoursTxt.includes("\n") ? ` <small>ほか（下の「店舗の詳細」に全部あります）</small>` : ""}</p>` : "";
-    const moveBtns = sort === "manual" ? `<span class="move-btns"><button class="btn small" type="button" data-vmove="-1" data-id="${esc(v.id)}" title="上へ">↑</button><button class="btn small" type="button" data-vmove="1" data-id="${esc(v.id)}" title="下へ">↓</button></span>` : "";
+      (cat ? `<span class="tag cat" title="業種">${ic("tag")}${esc(cat)}</span>` : `<span class="tag none" title="業種">${ic("tag")}業種：未取得</span>${canModify(v) ? `<button class="btn small" type="button" data-fillcat="${esc(v.id)}">業種を自動入力</button>` : ""}`);
+    const hoursHtml = hoursTxt ? `<p class="visit-hours">${ic("clock")}営業時間：${esc(hoursTxt.split("\n")[0])}${hoursTxt.includes("\n") ? ` <small>ほか（下の「店舗の詳細」に全部あります）</small>` : ""}</p>` : "";
+    const moveBtns = sort === "manual" ? `<span class="move-btns"><button class="btn small" type="button" data-vmove="-1" data-id="${esc(v.id)}" title="上へ" aria-label="上へ">${ic("up")}</button><button class="btn small" type="button" data-vmove="1" data-id="${esc(v.id)}" title="下へ" aria-label="下へ">${ic("down")}</button></span>` : "";
     const rest = items.filter((i, k) => k !== titleIdx && !subIds.includes(i.id) && i.type !== "time");
     const main = rest.filter((i) => ["personName", "phone", "maps", "memo"].includes(i.id) || i.type === "maps");
     const more = [...items.filter((i) => i.id === "hours" && i.value), ...rest.filter((i) => !main.includes(i))];
@@ -1789,8 +1824,8 @@ function renderFieldEditor() {
       <label class="check"><input type="checkbox" data-prop="required"${f.required ? " checked" : ""}> 必須にする</label>
       ${f.locked ? `<p class="locked">固定項目（削除・種類の変更はできません。名前・必須・並び順は変更できます）</p>` : ""}
       <div class="btn-row">
-        <button class="btn small" type="button" data-move="-1"${i === 0 ? " disabled" : ""}>↑ 上へ</button>
-        <button class="btn small" type="button" data-move="1"${i === fields.length - 1 ? " disabled" : ""}>↓ 下へ</button>
+        <button class="btn small" type="button" data-move="-1"${i === 0 ? " disabled" : ""}>${ic("up")}上へ</button>
+        <button class="btn small" type="button" data-move="1"${i === fields.length - 1 ? " disabled" : ""}>${ic("down")}下へ</button>
         ${f.locked ? "" : `<button class="btn small danger" type="button" data-remove>削除</button>`}
       </div>
     </div>`).join("");
@@ -1875,7 +1910,7 @@ function renderPending() {
   $("#pendingVerify").classList.toggle("hidden", !!currentUser?.emailVerified);
   getDoc(doc(db, "accessRequests", currentUser.uid)).then((s) => {
     if (s.exists()) {
-      $("#pendingStatus").textContent = "✓ 申請済みです。管理者が許可すると、この画面が自動で切り替わります。";
+      $("#pendingStatus").textContent = "申請済みです。管理者が許可すると、この画面が自動で切り替わります。";
       if (!$("#reqName").value) $("#reqName").value = s.data().name || "";
     } else {
       $("#pendingStatus").textContent = !membersLoaded ? "" : "まだ申請していません。お名前を入れて「利用を申請する」を押してください。";
@@ -1889,7 +1924,7 @@ $("#sendRequest").addEventListener("click", async () => {
     await setDoc(doc(db, "accessRequests", currentUser.uid), {
       email: myEmail(), name, verified: !!currentUser.emailVerified, createdAt: serverTimestamp()
     });
-    $("#pendingStatus").textContent = "✓ 申請しました。管理者が許可すると、この画面が自動で切り替わります。";
+    $("#pendingStatus").textContent = "申請しました。管理者が許可すると、この画面が自動で切り替わります。";
     toast("利用を申請しました");
   } catch (err) { showError($("#pendingStatus"), err, "利用の申請"); }
 });
@@ -1924,7 +1959,7 @@ function renderMembers() {
     </div>`;
   }).join("");
   const pend = accessRequests.filter((r) => !all.includes((r.email || "").toLowerCase()));
-  $("#requestList").innerHTML = pend.length ? `<div class="req-box"><b>🔔 利用申請 ${pend.length}件</b>` + pend.map((r) => `
+  $("#requestList").innerHTML = pend.length ? `<div class="req-box"><b>${ic("bell")}利用申請 ${pend.length}件</b>` + pend.map((r) => `
     <div class="member-row">
       <span class="m-email">${esc(r.email)}<small>（${esc(r.name || "")}）</small>${r.verified ? "" : '<small class="warn-text">※メール未確認</small>'}</span>
       <span class="btn-row" style="margin:0">
@@ -2019,7 +2054,7 @@ function mapsDirUrl(list) {
   if (stops.length > 1) u.searchParams.set("waypoints", stops.slice(0, -1).slice(0, 9).join("|"));
   return u.toString();
 }
-const demoLinksHtml = (url) => url ? `<a class="btn small" href="${esc(url)}" target="_blank" rel="noopener">🌐 デモサイト</a><a class="demo-url-link" href="${esc(url)}" target="_blank" rel="noopener">${esc(String(url).replace(/^https?:\/\//, ""))}</a><button class="btn small" type="button" data-copy="${esc(url)}">デモURLをコピー</button>` : "";
+const demoLinksHtml = (url) => url ? `<a class="btn small" href="${esc(url)}" target="_blank" rel="noopener">${ic("globe")}デモサイト</a><a class="demo-url-link" href="${esc(url)}" target="_blank" rel="noopener">${esc(String(url).replace(/^https?:\/\//, ""))}</a><button class="btn small" type="button" data-copy="${esc(url)}">デモURLをコピー</button>` : "";
 function visitMiniHtml(v, opts = {}) {
   const st = visitStatus(v);
   const maps = (v.items || []).find((i) => i.type === "maps" && i.value)?.value;
@@ -2027,7 +2062,7 @@ function visitMiniHtml(v, opts = {}) {
   return `<div class="mini-row">
     <div class="mini-main">
       <div class="mini-title">${time ? `<b>${esc(fmtHour(time))}</b> ` : ""}${v.caseNo ? `<span class="case-no">${esc(v.caseNo)}</span> ` : ""}${esc(shopOf(v) || "（店舗名なし）")}</div>
-      <div class="mini-sub">${[opts.showDate && fmtDateJa(v.visitDate), placeOf(v), industryOf(v), personOf(v) && `👤 ${personOf(v)}`].filter(Boolean).map(esc).join(" · ")}</div>
+      <div class="mini-sub">${[opts.showDate && fmtDateJa(v.visitDate), placeOf(v), industryOf(v), personOf(v)].filter(Boolean).map(esc).join(" · ")}</div>
     </div>
     <div class="btn-row" style="margin:0">${st.html}
       ${maps ? `<a class="btn small" href="${esc(maps)}" target="_blank" rel="noopener">地図</a>` : ""}
@@ -2081,8 +2116,8 @@ function renderToday() {
   $("#todayVisits").innerHTML = mine.length
     ? `<p class="hint">${who}訪問 ${mine.length}件（報告済み ${mine.filter((v) => visitStatus(v).done).length}件）</p>` +
       mine.map((v) => visitMiniHtml(v)).join("") +
-      (route ? `<div class="btn-row"><a class="btn" href="${esc(route)}" target="_blank" rel="noopener">🗺 この予定のルートをGoogleマップで開く</a></div>` : "")
-    : `<p class="empty">${esc(dayWord)}の${esc(who)}訪問予定はありません${pF === "__me" && !myName ? "<br><small>右上の「👤 名前」で自分の名前を固定すると、自分の予定が表示されます</small>" : ""}${pF || iF || stF ? "<br><small>絞り込みを変えると、ほかの予定も見られます</small>" : ""}</p>`;
+      (route ? `<div class="btn-row"><a class="btn" href="${esc(route)}" target="_blank" rel="noopener">${ic("route")}この予定のルートをGoogleマップで開く</a></div>` : "")
+    : `<p class="empty">${esc(dayWord)}の${esc(who)}訪問予定はありません${pF === "__me" && !myName ? "<br><small>右上の「名前を設定」で自分の名前を固定すると、自分の予定が表示されます</small>" : ""}${pF || iF || stF ? "<br><small>絞り込みを変えると、ほかの予定も見られます</small>" : ""}</p>`;
 
   // 次回アクション：自分の報告で、予定日が今日まで・未対応のもの
   const acts = reports.filter((r) => isMyReport(r) && !r.naDone).map((r) => {
@@ -2108,7 +2143,7 @@ function renderToday() {
     .sort((a, b) => (a.visitDate || "").localeCompare(b.visitDate || ""));
   $("#todayMissing").innerHTML = missing.length
     ? `<p class="hint">直近2週間で、まだ完了報告をしていない訪問が ${missing.length}件あります</p>` + missing.map((v) => visitMiniHtml(v, { showDate: true })).join("")
-    : `<p class="empty">報告漏れはありません 👍</p>`;
+    : `<p class="empty">${ic("checkCircle", "ok")}<br>報告漏れはありません</p>`;
 }
 document.addEventListener("click", async (e) => {
   const b = e.target.closest("button[data-na-done]");
@@ -2137,7 +2172,7 @@ function duplicateNote(row, info) {
   if (!hits.length) return "";
   const v = hits[0];
   const st = visitStatus(v);
-  return `⚠ 以前にも登録あり：${v.caseNo || ""}（${fmtDateJa(v.visitDate)}${personOf(v) ? `・${personOf(v)}` : ""}${st.done ? `・結果：${st.result || "報告済み"}` : "・未報告"}）${hits.length > 1 ? ` ほか${hits.length - 1}件` : ""}`;
+  return `以前にも登録あり：${v.caseNo || ""}（${fmtDateJa(v.visitDate)}${personOf(v) ? `・${personOf(v)}` : ""}${st.done ? `・結果：${st.result || "報告済み"}` : "・未報告"}）${hits.length > 1 ? ` ほか${hits.length - 1}件` : ""}`;
 }
 
 /* ---------- 写真（端末で小さくしてから保存） ---------- */

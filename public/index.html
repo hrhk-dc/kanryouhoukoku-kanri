@@ -4,27 +4,31 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DC 完了報告</title>
-<meta name="theme-color" content="#161b27">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="DC報告">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="topbar">
-  <h1>DC 完了報告</h1>
+  <h1><span class="brand-mark" aria-hidden="true"></span>DC 完了報告</h1>
   <div class="topbar-actions">
-    <button id="undoBtn" class="btn ghost small hidden-logged-out" type="button" disabled title="直前の削除・変更を元に戻す">↩ 戻る</button>
-    <button id="redoBtn" class="btn ghost small hidden-logged-out" type="button" disabled title="元に戻した操作をやり直す">↪ 進む</button>
+    <button id="undoBtn" class="btn ghost small icon-btn hidden-logged-out" type="button" disabled title="直前の削除・変更を元に戻す" aria-label="元に戻す"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 6.5L4.5 10.5l4 4"/><path d="M4.5 10.5h10a5 5 0 010 10H11"/></svg></button>
+    <button id="redoBtn" class="btn ghost small icon-btn hidden-logged-out" type="button" disabled title="元に戻した操作をやり直す" aria-label="やり直す"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 6.5l4 4-4 4"/><path d="M19.5 10.5h-10a5 5 0 000 10H13"/></svg></button>
     <button id="installBtn" class="btn primary small hidden" type="button">アプリをインストール</button>
-    <button id="copyAppLink" class="btn ghost small" type="button">このアプリのリンクをコピー</button>
-    <button id="myNameLabel" class="btn ghost small hidden-logged-out" type="button" title="自分の名前（担当者名の自動入力）">👤 名前を設定</button>
+    <button id="copyAppLink" class="btn ghost small" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/></svg><span>リンクをコピー</span></button>
+    <button id="myNameLabel" class="btn ghost small hidden-logged-out" type="button" title="自分の名前（担当者名の自動入力）"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1.2-3.6 4-5.4 7.5-5.4s6.3 1.8 7.5 5.4"/></svg><span>名前を設定</span></button>
     <span id="userEmail" class="user-email"></span>
-    <button id="logoutBtn" class="btn ghost small hidden" type="button">ログアウト</button>
+    <button id="logoutBtn" class="btn ghost small hidden" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4.5h3.5a2 2 0 012 2v11a2 2 0 01-2 2H14M10 16l4-4-4-4M14 12H4"/></svg><span>ログアウト</span></button>
   </div>
 </header>
 
@@ -170,12 +174,12 @@
     <div id="tab-form" class="tab-panel hidden">
       <form id="reportForm" class="card" novalidate>
         <h2 id="formTitle">完了報告</h2>
-        <p class="hint" id="caseHint">1日に複数の案件を回った場合は「＋ 別の案件を追加」で、まとめて報告できます。</p>
+        <p class="hint" id="caseHint">1日に複数の案件を回った場合は「別の案件を追加」で、まとめて報告できます。</p>
         <div id="reportCases"></div>
 
         <p id="formError" class="error"></p>
         <div class="btn-row">
-          <button class="btn" type="button" id="addCase">＋ 別の案件を追加</button>
+          <button class="btn" type="button" id="addCase"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>別の案件を追加</button>
           <button class="btn primary" type="submit" id="saveReport">保存する</button>
           <button class="btn ghost hidden" type="button" id="cancelEdit">編集をやめる</button>
         </div>
@@ -190,17 +194,17 @@
           <input type="date" id="visitDate" required>
         </label>
         <div class="bulk-box" id="bulkBox">
-          <label for="bulkLinks" class="bulk-label">📋 Googleマップのリンクを貼り付けるだけでOK（1件でも、何件まとめてでも）</label>
+          <label for="bulkLinks" class="bulk-label"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4.5L3.5 6.5v13L9 17.5l6 2 5.5-2v-13L15 6.5z"/><path d="M9 4.5v13M15 6.5v13"/></svg>Googleマップのリンクを貼り付けるだけでOK（1件でも、何件まとめてでも）</label>
           <textarea id="bulkLinks" rows="3" placeholder="ここにリンクを貼り付け&#10;https://maps.app.goo.gl/xxxx&#10;https://maps.app.goo.gl/yyyy&#10;（LINEのメッセージをそのまま貼ってもOK）"></textarea>
           <div class="btn-row">
-            <button class="btn small primary" type="button" id="bulkPaste">📋 貼り付け</button>
+            <button class="btn small primary" type="button" id="bulkPaste"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4.5" width="14" height="16" rx="3"/><path d="M9 4.5V3.8c0-.7.5-1.3 1.2-1.3h3.6c.7 0 1.2.6 1.2 1.3v.7M8.5 11h7M8.5 15h4.5"/></svg>貼り付け</button>
           </div>
           <p class="hint">貼り付けると自動で読み取り、<b>リンク1つにつき1件</b>のカードを作ります。店舗名・住所・営業時間などは自動で入ります。間違っていたら、カードの中で直接書き換えてください。案件番号は保存したときに1件ずつ自動で付きます。</p>
         </div>
         <div id="visitRows"></div>
         <p id="visitError" class="error"></p>
         <div class="btn-row">
-          <button class="btn small ghost" type="button" id="addVisitRow">＋ リンクなしで手入力</button>
+          <button class="btn small ghost" type="button" id="addVisitRow"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>リンクなしで手入力</button>
           <button class="btn primary" type="submit" id="saveVisits">まとめて保存</button>
           <button class="btn ghost hidden" type="button" id="cancelVisitEdit">編集をやめる</button>
         </div>
@@ -256,13 +260,13 @@
             </select>
           </label>
           <div class="stats-pick">
-            <button class="btn small" type="button" id="statsPrev" title="前へ">◀</button>
+            <button class="btn small icon-btn" type="button" id="statsPrev" title="前へ" aria-label="前へ"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg></button>
             <input type="date" id="statsDay" class="hidden">
             <input type="month" id="statsMonthIn" class="hidden">
             <select id="statsYear" class="hidden"></select>
             <span id="statsRangeText" class="hint"></span>
             <input type="date" id="statsFrom" class="hidden"><span id="statsTilde" class="hidden">〜</span><input type="date" id="statsTo" class="hidden">
-            <button class="btn small" type="button" id="statsNext" title="次へ">▶</button>
+            <button class="btn small icon-btn" type="button" id="statsNext" title="次へ" aria-label="次へ"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg></button>
             <button class="btn small" type="button" id="statsNow">今に戻る</button>
           </div>
         </div>
@@ -311,7 +315,7 @@
 
       <div class="card">
         <h2>Claude Code 連携</h2>
-        <p class="hint">Claude Codeでデモサイトを作ったとき、そのURLを案件番号の訪問先に自動で登録できます（初回だけNetlifyの設定が必要です。手順は管理者向けメモを参照）。</p>
+        <p class="hint">Claude Codeでデモサイトを作ったとき、そのURLを案件番号の訪問先に自動で登録できます（初回だけCloudflareの設定が必要です。手順は管理者向けメモを参照）。</p>
         <div class="btn-row">
           <button class="btn" type="button" id="copyClaudeBatch">明日の訪問先のデモサイト作成をまとめて依頼（コピー）</button>
         </div>
@@ -328,7 +332,7 @@
         <div id="fmtSection"></div>
         <div id="fieldEditor"></div>
         <div class="btn-row">
-          <button class="btn" type="button" id="addField">＋ 項目を追加</button>
+          <button class="btn" type="button" id="addField"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>項目を追加</button>
           <button class="btn primary" type="button" id="saveFormat">このフォーマットを保存</button>
         </div>
       </div>
