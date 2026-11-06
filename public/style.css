@@ -408,3 +408,14 @@ select { appearance: none; -webkit-appearance: none; padding-right: 34px; backgr
 /* 報告一覧：店舗名の隣の業種 */
 .report-title .tag { font-size: 12px; font-weight: 600; margin-left: 6px; vertical-align: middle; }
 .demo-url-link { font-size: 12px; word-break: break-all; align-self: center; }
+
+/* 下に引いて更新 */
+html, body { overscroll-behavior-y: contain; }
+#pullIndicator {
+  position: fixed; top: env(safe-area-inset-top, 0px); left: 50%;
+  transform: translate(-50%, -60px); opacity: 0; pointer-events: none;
+  background: #fff; color: var(--primary, #1d4ed8); border: 1px solid #cbd5e1; border-radius: 999px;
+  padding: 8px 18px; font-size: 14px; font-weight: 600; box-shadow: 0 6px 18px rgba(0, 0, 0, .15);
+  z-index: 60; transition: opacity .15s;
+}
+#pullIndicator.ready { background: var(--primary, #1d4ed8); color: #fff; border-color: transparent; }

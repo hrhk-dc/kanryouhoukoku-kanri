@@ -5,7 +5,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, setDoc, collection, addDoc, updateDoc, deleteDoc,
-  onSnapshot, query, orderBy, serverTimestamp, writeBatch, runTransaction, getDoc, arrayUnion, arrayRemove
+  onSnapshot, query, orderBy, serverTimestamp, writeBatch, runTransaction, getDoc, getDocsFromServer, arrayUnion, arrayRemove
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 import { INDUSTRIES, classifyIndustry } from "./industry.js";
@@ -2542,3 +2542,80 @@ async function loadDemoUrls() {
   demoTimer = setTimeout(loadDemoUrls, 5 * 60 * 1000); // 5分ごとに確認
 }
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && dataLoaded) loadDemoUrls(); });
+
+/* ---------- 下に引っ張って更新（全員が使える） ----------
+   画面の一番上で下に引くと、報告一覧・訪問リスト・デモURLを最新に読み込み直す。
+   入力中のフォームには触らない（入力欄や開いている窓の上では動かない） */
+const pull = { startY: 0, dy: 0, active: false, busy: false, el: null };
+function pullEl() {
+  if (!pull.el) {
+    pull.el = document.createElement("div");
+    pull.el.id = "pullIndicator";
+    pull.el.setAttribute("aria-live", "polite");
+    document.body.appendChild(pull.el);
+  }
+  return pull.el;
+}
+function pullShow(dy, text, ready) {
+  const el = pullEl();
+  el.textContent = text;
+  el.classList.toggle("ready", !!ready);
+  el.style.transform = `translate(-50%, ${Math.min(dy, 90) - 60}px)`;
+  el.style.opacity = String(Math.min(1, dy / 50));
+}
+function pullHide() {
+  const el = pullEl();
+  el.style.transform = "translate(-50%, -60px)";
+  el.style.opacity = "0";
+}
+async function refreshAll() {
+  if (pull.busy || !currentUser || !dataLoaded) return;
+  pull.busy = true;
+  pullShow(60, "更新中…", true);
+  try {
+    const [rs, vs] = await Promise.all([
+      getDocsFromServer(query(collection(db, "reports"), orderBy("createdAt", "desc"))),
+      getDocsFromServer(query(collection(db, "visits"), orderBy("createdAt", "desc"))),
+      loadDemoUrls()
+    ]);
+    reports = rs.docs.map((d) => ({ id: d.id, ...d.data() }));
+    visits = vs.docs.map((d) => ({ id: d.id, ...d.data() }));
+    applyDemoUrls();
+    renderList();
+    renderVisitList();
+    renderAllExtras();
+    toast("最新の情報に更新しました");
+  } catch (err) {
+    showBanner(err, "最新の情報の読み込み");
+  } finally {
+    pull.busy = false;
+    pullHide();
+  }
+}
+function pullBlocked(target) {
+  if (!document.body.classList.contains("logged-in") || $("#appView").classList.contains("hidden")) return true;
+  if (window.scrollY > 0 || document.documentElement.scrollTop > 0) return true;
+  if (target && target.closest && target.closest("input, textarea, select, [contenteditable], dialog, .modal, .overlay, .lightbox")) return true;
+  return false;
+}
+document.addEventListener("touchstart", (e) => {
+  if (pull.busy || e.touches.length !== 1 || pullBlocked(e.target)) { pull.active = false; return; }
+  pull.active = true;
+  pull.startY = e.touches[0].clientY;
+  pull.dy = 0;
+}, { passive: true });
+document.addEventListener("touchmove", (e) => {
+  if (!pull.active) return;
+  if (window.scrollY > 0) { pull.active = false; pullHide(); return; }
+  pull.dy = e.touches[0].clientY - pull.startY;
+  if (pull.dy <= 0) { pullHide(); return; }
+  pullShow(pull.dy * 0.6, pull.dy * 0.6 >= 50 ? "指をはなして更新" : "下に引いて更新", pull.dy * 0.6 >= 50);
+}, { passive: true });
+function pullEnd() {
+  if (!pull.active) return;
+  pull.active = false;
+  if (pull.dy * 0.6 >= 50) refreshAll(); else pullHide();
+}
+document.addEventListener("touchend", pullEnd, { passive: true });
+document.addEventListener("touchcancel", () => { pull.active = false; pullHide(); }, { passive: true });
+
