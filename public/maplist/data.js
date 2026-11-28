@@ -152,6 +152,7 @@
       const shops = (j.shops || [])
         .map((s) => ({ ...s, distance: haversine(center, s) }))
         .filter((s) => town || s.distance <= radius)  // 町名まるごとは範囲（矩形）で絞っている
+        .filter((s) => !s.website && !s.brand)        // 絶対条件（二重の確認）：サイトのある店・チェーン店は、画面に出さない
         .sort((a, b) => a.distance - b.distance);
       return { shops, hasMore: j.hasMore === true };
     },
