@@ -1009,7 +1009,9 @@
   }
 
   // ---------- 地図で見る（店の位置を番号つきのピンで並べる） ----------
-  const PIN = '123456789ABCDEFGHIJK'; // 番号（画面の並びと地図のピンが一致する）
+  // 番号：1, 2, 3 … と数字で続ける（9の次は10）。2けたのときは、ピンの文字を小さくして枠に収める
+  const pinLabel = (i) => String(i + 1);
+  const pinClass = (i) => (i + 1 > 9 ? " two" : "");
   const SORT_LABEL = { rec: 'おすすめ順', dist: '近い順', route: 'ルート順' };
   // ---------- 地図（対話式：Leaflet＋OpenStreetMap。店は番号つきのピン。自分の位置は青い点） ----------
   // 指で動かして拡大縮小できる。ピンか一覧の店を押すと、その店が選ばれる（ピン・一覧・店名を同じにそろえる）
@@ -1058,14 +1060,14 @@
       <div class="map-tools"><button class="pill-btn" data-act="map-full">${ic('ext')}全画面で見る</button></div>
       <p class="map-sel" id="mapSel">${selText(list)}</p>
       <p class="hint">${routeHint}</p>
-      <ol class="map-order">${list.map((s, i) => `<li class="${state.mapSel === s.id ? 'on' : ''}" data-act="map-pick" data-id="${esc(s.id)}"><span class="pin-no">${PIN[i]}</span><span class="map-name">${esc(s.name)}</span><small>${state.pSort === 'route' ? '前から ' : ''}${legText(s)}</small></li>`).join('')}</ol>
+      <ol class="map-order">${list.map((s, i) => `<li class="${state.mapSel === s.id ? 'on' : ''}" data-act="map-pick" data-id="${esc(s.id)}"><span class="pin-no${pinClass(i)}">${pinLabel(i)}</span><span class="map-name">${esc(s.name)}</span><small>${state.pSort === 'route' ? '前から ' : ''}${legText(s)}</small></li>`).join('')}</ol>
     </div>`;
   }
 
   function pinIcon(L, label, id) {
     return L.divIcon({
       className: 'lp-wrap',
-      html: `<span class="lp-pin${state.mapSel === id ? ' on' : ''}">${label}</span>`,
+      html: `<span class="lp-pin${label.length > 1 ? ' two' : ''}${state.mapSel === id ? ' on' : ''}">${label}</span>`,
       iconSize: [30, 30],
       iconAnchor: [15, 15],
     });
@@ -1084,7 +1086,7 @@
     const pts = [];
     list.forEach((s, i) => {
       if (!hasPos(s)) return;
-      const m = L.marker([s.lat, s.lng], { icon: pinIcon(L, PIN[i], s.id), keyboard: false, title: s.name }).addTo(map);
+      const m = L.marker([s.lat, s.lng], { icon: pinIcon(L, pinLabel(i), s.id), keyboard: false, title: s.name }).addTo(map);
       m.on('click', () => selectShop(s.id, false));
       markers.set(s.id, m);
       pts.push([s.lat, s.lng]);
@@ -1227,7 +1229,7 @@
     if (idx < 0) { bar.hidden = true; bar.innerHTML = ''; return; }
     const s = fullMap.list[idx];
     bar.hidden = false;
-    bar.innerHTML = `<div class="fb-top"><span class="pin-no">${PIN[idx]}</span><span class="fb-name">${esc(s.name)}</span><span class="fb-dist">${state.pSort === 'route' ? '前から ' : ''}${legText(s)}</span></div>
+    bar.innerHTML = `<div class="fb-top"><span class="pin-no${pinClass(idx)}">${pinLabel(idx)}</span><span class="fb-name">${esc(s.name)}</span><span class="fb-dist">${state.pSort === 'route' ? '前から ' : ''}${legText(s)}</span></div>
       <div class="fb-row"><span class="tag">${esc(s.industry) || '業種は不明'}</span><span class="fb-addr">${esc(s.address)}</span></div>
       <p class="fb-hours">${hoursLine(s)}</p>
       <button type="button" class="btn small" data-fb="detail">詳しく見る</button>`;
@@ -1286,7 +1288,8 @@
     'login-from-sheet': () => { closeSheet(); login(); },
     'menu-logout': () => { closeMenu(); logout(); },
     'menu-login': () => { closeMenu(); login(); },
-    'p-view': (el) => { state.pView = el.dataset.v; renderProposal(); },
+    // 「地図で見る」はルート順、「一覧で見る」はおすすめ順が初めの並び（並べ替えのボタンで変えられる）
+    'p-view': (el) => { state.pView = el.dataset.v; state.pSort = state.pView === 'map' ? 'route' : 'rec'; saveUiSoon(); renderProposal(); },
     'map-full': () => openFullMap(),
     'map-pick': (el) => selectShop(el.dataset.id, true),
     cat: (el) => { if (CATS.some(([k]) => k === el.dataset.v)) { state.category = el.dataset.v; renderInd(); } },

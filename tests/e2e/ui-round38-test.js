@@ -21,7 +21,7 @@ const SHOPS = Array.from({ length: 10 }, (_, i) => {
   const lat = 35.66 + r * Math.sin(ang * Math.PI / 180), lng = 139.70 + r * Math.cos(ang * Math.PI / 180);
   return {
     id: `r-${i}`, name: `テスト店${i + 1}`, industry: i % 2 ? '喫茶' : '食堂', address: `東京都テスト区${i + 1}-1`,
-    lat, lng, hours: i % 3 === 0 ? {} : ALL, phone: i % 2 ? '' : `03-0000-00${i}`, website: i % 4 === 0 ? 'https://example.com/s' : '',
+    lat, lng, hours: i % 3 === 0 ? {} : ALL, phone: i % 2 ? '' : `03-0000-00${i}`, website: '',
     insta: i % 5 === 0 ? 'shop' : '', visited: false,
   };
 });
@@ -144,7 +144,7 @@ const SHOPS = Array.from({ length: 10 }, (_, i) => {
         hint: [...s.querySelectorAll('.map-card .hint')].map((h) => h.textContent).join(' '),
       };
     });
-    ok('ルート順：10件が並ぶ（番号は ①〜⑩ の代わりに 1〜9・A の順）', route.n === 10 && route.pins === '123456789A', JSON.stringify(route));
+    ok('ルート順：10件が並ぶ（番号は 1〜10 の数字の順）', route.n === 10 && route.pins === '12345678910', JSON.stringify(route));
     ok('ルート順：区間距離（前から…）が出る', route.legs.every((t) => /前から/.test(t)), route.legs.join(','));
     ok('ルート順：線が引かれる（地図の上に線がある）', route.lines >= 1, route.lines);
     ok('ルート順：合計の道のりが出る', route.hint.includes('ルートの合計は約'), route.hint.slice(0, 80));
@@ -161,7 +161,7 @@ const SHOPS = Array.from({ length: 10 }, (_, i) => {
     await sr(() => document.getElementById('mlHost').shadowRoot.querySelector('[data-act="open-only"]').click());
     await wait(page, 800);
     const after = await sr(() => ({ n: document.getElementById('mlHost').shadowRoot.querySelectorAll('.map-order li').length, pins: [...document.getElementById('mlHost').shadowRoot.querySelectorAll('.map-order li .pin-no')].map((x) => x.textContent).join('') }));
-    ok('営業中のみを変えると、ルートも作り直される（ピンは並びの番号どおり）', after.n >= 1 && after.pins === '123456789A'.slice(0, after.n), JSON.stringify(after));
+    ok('営業中のみを変えると、ルートも作り直される（ピンは並びの番号どおり）', after.n >= 1 && after.pins === Array.from({ length: after.n }, (_, i) => String(i + 1)).join(''), JSON.stringify(after));
     await sr(() => document.getElementById('mlHost').shadowRoot.querySelector('[data-act="open-only"]').click());
     await wait(page, 600);
 

@@ -1,7 +1,7 @@
 // DC 完了報告：ホーム画面アプリ用のサービスワーカー
 // 画面のファイルは「ネット優先・つながらない時だけ保存版」を使う（更新がすぐ反映されるように）
 // 報告データ（Firebase）は保存しない
-const CACHE = "dc-report-v98";
+const CACHE = "dc-report-v99";
 // 完了報告とマップリストは、このサービスワーカー1つで扱う（マップリストの sw.js は使わない）
 const SHELL = [
   "/", "/index.html", "/style.css", "/app.js", "/firebase-config.js",

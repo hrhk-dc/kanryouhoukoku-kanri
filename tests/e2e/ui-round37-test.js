@@ -17,7 +17,7 @@ const wait = (page, ms) => page.waitForTimeout(ms);
 const ALL_DAYS = { mon: '11:00〜21:00', tue: '11:00〜21:00', wed: '11:00〜21:00', thu: '11:00〜21:00', fri: '11:00〜21:00', sat: '11:00〜21:00', sun: '11:00〜21:00' };
 // OSM の形：全部そろった店／営業時間も連絡先も無い店／業種が無く、SNS だけある店
 const OSM_SHOPS = [
-  { id: 'osm-full', name: 'テスト食堂A', industry: '食堂', address: '東京都テスト区1-1', lat: 35.6601, lng: 139.7001, hours: ALL_DAYS, phone: '03-0000-0001', website: 'https://example.com/a', visited: false },
+  { id: 'osm-full', name: 'テスト食堂A', industry: '食堂', address: '東京都テスト区1-1', lat: 35.6601, lng: 139.7001, hours: ALL_DAYS, phone: '03-0000-0001', website: '', visited: false },
   { id: 'osm-bare', name: 'テスト喫茶B', industry: '喫茶', address: '東京都テスト区2-2', lat: 35.6605, lng: 139.7010, hours: {}, visited: false },
   { id: 'osm-part', name: 'テスト店C', industry: '', address: '東京都テスト区3-3', lat: 35.6610, lng: 139.7020, hours: { mon: '10:00〜18:00' }, insta: 'testc', visited: false },
 ];
